@@ -86,8 +86,8 @@ function App(){
     const job=bridge.startGeneration(kernel.localModel.path,v);generationRef.current=job;
     const poll=()=>{
      if(generationRef.current!==job)return;
-     let packet="";try{packet=bridge.pollGeneration(job)}catch(e){packet="ERROR\\n"+(e?.message||"poll failed")}
-     const cut=packet.indexOf("\\n");const status=cut<0?packet:packet.slice(0,cut);const body=cut<0?"":packet.slice(cut+1);
+     let packet="";try{packet=bridge.pollGeneration(job)}catch(e){packet="ERROR\n"+(e?.message||"poll failed")}
+     const cut=packet.indexOf("\n");const status=cut<0?packet:packet.slice(0,cut);const body=cut<0?"":packet.slice(cut+1);
      if(status==="RUNNING"){setMode("thinking");setTimeout(poll,90);return}
      generationRef.current=null;
      const reply=status==="DONE"?parseModelReply(body):{text:status==="ERROR"?body:demoBrain(v,kernel),emotion:"concerned",gesture:"reset",pace:"normal"};
@@ -98,7 +98,7 @@ function App(){
   }
   setTimeout(()=>{const reply=parseModelReply(demoBrain(v,kernel));setMessages(m=>[...m,{role:"assistant",text:reply.text}]);setMode("idle");speak(reply.text)},220);
  }
- function evolve(){setKernel(old=>{let k=checkpoint(clone(old),"before self-improvement");const n=k.evolution.generation+1;const change={id:crypto.randomUUID(),at:new Date().toISOString(),generation:n,summary:"Expanded local evolution capacity and refreshed character guidance.",details:"Self-improvement changed the editable behavior layer only.",reversible:true};k.persona.rules=[...new Set([...k.persona.rules,"Preserve the retro clock-character visual identity while evolving."])];k.evolution.generation=n;k.evolution.ledger=[change,...k.evolution.ledger].slice(0,50);return k});setMessages(m=>[...m,{role:"assistant",text:"There we go! I improved the framework and tucked the previous timeline into a checkpoint."}])}
+ function evolve(){try{setKernel(old=>{let k=checkpoint(clone(old),"before self-improvement");const n=k.evolution.generation+1;const change={id:uid(),at:new Date().toISOString(),generation:n,summary:"Expanded local evolution capacity and refreshed character guidance.",details:"Self-improvement changed the editable behavior layer only.",reversible:true};k.persona.rules=[...new Set([...k.persona.rules,"Preserve the faithful retro clock-character visual identity while evolving."])];k.evolution.generation=n;k.evolution.ledger=[change,...k.evolution.ledger].slice(0,50);return k});setPanel(null);setMessages(m=>[...m,{role:"assistant",text:"There we go! I improved the framework and tucked the previous timeline into a checkpoint."}])}catch(e){setRuntimeError(e?.message||"Self-improvement failed.")}}
  function rollback(){setKernel(old=>windUp(old));setMessages(m=>[...m,{role:"assistant",text:"Winding the clock... back to the last known-good framework."}]);setMode("idle")}
  function addMemory(){const v=prompt("What should I remember locally?");if(v?.trim())setKernel(k=>({...k,memories:[...k.memories,v.trim()]}))}
  const stateText=mode==="thinking"?"Hmm... let me check the timeline.":mode==="speaking"?"There we go!":mode==="listening"?"I'm listening, sugar.":messages.length?"Awaiting your next temporal anomaly.":"Welcome to the TVA, sugar!";
