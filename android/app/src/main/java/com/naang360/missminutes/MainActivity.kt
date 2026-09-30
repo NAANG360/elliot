@@ -215,47 +215,60 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
         Thread {
             val part = File(root, "models/" + BASE_MODEL_NAME + ".part")
             try {
-                if (part.exists()) part.delete()
-                val connection = (URL(BASE_MODEL_URL).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 20000
-                    readTimeout = 30000
-                    instanceFollowRedirects = true
-                    requestMethod = "GET"
-                }
-                connection.connect()
-                if (connection.responseCode !in 200..299) error("Model download HTTP " + connection.responseCode)
-                val total = connection.contentLengthLong
-                connection.inputStream.use { input ->
-                    part.outputStream().use { output ->
-                        val buf = ByteArray(1024 * 1024)
-                        var readTotal = 0L
-                        var lastPercent = -1
-                        while (true) {
-                            val n = input.read(buf)
-                            if (n <= 0) break
-                            output.write(buf, 0, n)
-                            readTotal += n
-                            val pct = if (total > 0) ((readTotal * 100L) / total).toInt().coerceIn(0, 100) else -1
-                            if (pct >= 0 && pct != lastPercent) {
-                                lastPercent = pct
-                                emitModel("downloading", pct, null)
+                var downloaded = if (part.exists()) part.length() else 0L
+                var connection: HttpURLConnection? = null
+                var total = -1L
+                try {
+                    connection = (URL(BASE_MODEL_URL).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 30000
+                        readTimeout = 120000
+                        instanceFollowRedirects = true
+                        requestMethod = "GET"
+                        setRequestProperty("Accept-Encoding", "identity")
+                        if (downloaded > 0L) setRequestProperty("Range", "bytes=" + downloaded + "-")
+                    }
+                    connection.connect()
+                    val code = connection.responseCode
+                    if (code !in 200..299) error("Model download HTTP " + code)
+                    if (downloaded > 0L && code == HttpURLConnection.HTTP_OK) {
+                        part.delete()
+                        downloaded = 0L
+                    }
+                    val responseLength = connection.contentLengthLong
+                    total = if (code == HttpURLConnection.HTTP_PARTIAL && responseLength >= 0L) downloaded + responseLength else responseLength
+                    connection.inputStream.use { input ->
+                        part.outputStream(if (downloaded > 0L && code == HttpURLConnection.HTTP_PARTIAL) true else false).use { output ->
+                            val buf = ByteArray(1024 * 1024)
+                            var readTotal = downloaded
+                            var lastPercent = -1
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n <= 0) break
+                                output.write(buf, 0, n)
+                                readTotal += n
+                                val pct = if (total > 0) ((readTotal * 100L) / total).toInt().coerceIn(0, 100) else -1
+                                if (pct >= 0 && pct != lastPercent) {
+                                    lastPercent = pct
+                                    emitModel("downloading", pct, null)
+                                }
                             }
                         }
                     }
+                } finally {
+                    connection?.disconnect()
                 }
-                connection.disconnect()
-                if (part.length() < BASE_MODEL_MIN_BYTES) error("Downloaded model is unexpectedly small.")
-                val digest=MessageDigest.getInstance("SHA-256")
+                if (part.length() < BASE_MODEL_MIN_BYTES) error("Model download ended early at " + part.length() + " bytes.")
+                val digest = MessageDigest.getInstance("SHA-256")
                 part.inputStream().use { input ->
-                    val buf=ByteArray(1024*1024)
-                    while(true){
-                        val n=input.read(buf)
-                        if(n<=0) break
-                        digest.update(buf,0,n)
+                    val buf = ByteArray(1024 * 1024)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n <= 0) break
+                        digest.update(buf, 0, n)
                     }
                 }
-                val actualHash=digest.digest().joinToString("") { "%02x".format(it) }
-                if(actualHash!=BASE_MODEL_SHA256) error("Base brain checksum mismatch.")
+                val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
+                if (actualHash != BASE_MODEL_SHA256) error("Base brain checksum mismatch: " + actualHash)
                 if (target.exists()) target.delete()
                 if (!part.renameTo(target)) {
                     part.copyTo(target, overwrite = true)
@@ -266,7 +279,6 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
                 emitModel("ready", 100, target)
             } catch (t: Throwable) {
                 downloading = false
-                if (part.exists()) part.delete()
                 emitModel("error", 0, null, t.message ?: "Base brain download failed.")
             }
         }.start()
