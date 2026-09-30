@@ -31,3 +31,6 @@ The Android target lives under `android/`. It hosts the same editable Miss Minut
 Miss Minutes gets room to evolve. The immutable escape hatch is below her: before an evolution is committed, the current framework is snapshotted. **Wind Up the Clock** restores that snapshot and reloads the known-good state.
 
 This is a fan-made project and is not an official Marvel, Loki, or Disney product.
+
+
+Build marker: current debug APK requested on 2026-09-30.
