@@ -1,6 +1,9 @@
 package com.naang360.missminutes
 
-import android.app.Activity\nimport android.Manifest\nimport android.content.pm.PackageManager\nimport android.webkit.PermissionRequest
+import android.app.Activity
+import android.Manifest
+import android.content.pm.PackageManager
+import android.webkit.PermissionRequest
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
