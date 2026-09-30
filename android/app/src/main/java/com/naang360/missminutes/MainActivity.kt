@@ -164,6 +164,9 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
     }
 
     @JavascriptInterface
+    fun startSensors(): Boolean = true
+
+    @JavascriptInterface
     fun frameworkPath(): String = root.absolutePath
 
     @JavascriptInterface
