@@ -6,6 +6,12 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import kotlin.math.sqrt
+import kotlin.math.abs
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -31,6 +37,8 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var framework: FrameworkBridge
     private val modelRequest = 7412
+    private lateinit var sensorManager: SensorManager
+    private var sensorBridge: SensorBridge? = null
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
@@ -53,6 +61,8 @@ class MainActivity : Activity() {
             loadUrl("https://appassets.androidplatform.net/assets/web/index.html")
         }
         setContentView(web)
+        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+        sensorBridge = SensorBridge(sensorManager, this).also { it.start() }
     }
 
     private val assetLoader: WebViewAssetLoader by lazy {
@@ -101,6 +111,43 @@ private class AppAssetClient(private val loader: WebViewAssetLoader) : WebViewCl
         view: WebView,
         request: WebResourceRequest
     ): WebResourceResponse? = loader.shouldInterceptRequest(request.url)
+}
+
+
+private class SensorBridge(private val manager: SensorManager, private val activity: MainActivity) : SensorEventListener {
+    private val accel = manager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private val gyro = manager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+    private val light = manager.getDefaultSensor(Sensor.TYPE_LIGHT)
+    private val proximity = manager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+    private var lastAx=0f; private var lastAy=0f; private var lastAz=0f
+    fun start(){
+        listOf(accel,gyro,light,proximity).filterNotNull().forEach { manager.registerListener(this,it,SensorManager.SENSOR_DELAY_GAME) }
+    }
+    fun stop(){ manager.unregisterListener(this) }
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+    override fun onSensorChanged(e: SensorEvent){
+        when(e.sensor.type){
+            Sensor.TYPE_ACCELEROMETER -> {
+                val dx=abs(e.values[0]-lastAx); val dy=abs(e.values[1]-lastAy); val dz=abs(e.values[2]-lastAz)
+                lastAx=e.values[0]; lastAy=e.values[1]; lastAz=e.values[2]
+                val shake=(dx+dy+dz).coerceIn(0f,12f)/12f
+                val tilt=(sqrt(e.values[0]*e.values[0]+e.values[1]*e.values[1])/9.81f).coerceIn(0f,1f)
+                emit("shake",shake,"tilt",tilt)
+            }
+            Sensor.TYPE_GYROSCOPE -> {
+                val g=sqrt(e.values[0]*e.values[0]+e.values[1]*e.values[1]+e.values[2]*e.values[2]).coerceIn(0f,8f)/8f
+                emit("gyro",g)
+            }
+            Sensor.TYPE_LIGHT -> emit("light",e.values[0].coerceIn(0f,1000f)/1000f)
+            Sensor.TYPE_PROXIMITY -> emit("proximity",if(e.values[0] < (proximity?.maximumRange ?: 5f)*0.5f) 1f else 0f)
+        }
+    }
+    private fun emit(vararg pairs: Any){
+        val json=JSONObject()
+        var i=0
+        while(i+1<pairs.size){json.put(pairs[i].toString(),pairs[i+1]);i+=2}
+        activity.dispatchModelEvent("window.dispatchEvent(new CustomEvent('miss-sensor-event',{detail:$json}))")
+    }
 }
 
 class FrameworkBridge(private val root: File, private val activity: MainActivity) {
