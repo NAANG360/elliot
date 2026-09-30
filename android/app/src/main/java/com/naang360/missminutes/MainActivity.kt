@@ -54,7 +54,14 @@ class MainActivity : Activity() {
             settings.allowContentAccess = false
             settings.databaseEnabled = true
             webViewClient = AppAssetClient(assetLoader)
-            webChromeClient = object : WebChromeClient() {\n                override fun onPermissionRequest(request: PermissionRequest) {\n                    runOnUiThread {\n                        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {\n                            request.grant(request.resources)\n                        } else request.deny()\n                    }\n                }
+            webChromeClient = object : WebChromeClient() {
+                override fun onPermissionRequest(request: PermissionRequest) {
+                    runOnUiThread {
+                        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            request.grant(request.resources)
+                        } else request.deny()
+                    }
+                }
                 override fun onConsoleMessage(message: ConsoleMessage): Boolean {
                     android.util.Log.e("MissMinutes", "JS: ${message.message()} @${message.sourceId()}:${message.lineNumber()}")
                     return true
