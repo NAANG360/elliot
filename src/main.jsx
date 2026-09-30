@@ -3,7 +3,7 @@ import{createRoot}from"react-dom/client";
 import"./style.css";
 import MissMinutes3D from "./MissMinutes3D.jsx";
 
-const STATE="miss-minutes-kernel-v7";
+const STATE="miss-minutes-kernel-v8";
 const uid=()=>globalThis.crypto?.randomUUID?.()||("chronal-"+Date.now()+"-"+Math.random().toString(16).slice(2));
 const IDENTITY={name:"Miss Minutes",role:"your local chronal companion",identityAnchor:"I am Miss Minutes. This is my name and role inside this application.",style:"cheerful retro-cartoon clock mascot; theatrical, warm, mischievous, precise",boundaries:"Fan-made local assistant; not official Marvel/TVA software."};
 const DEFAULT_KERNEL={
@@ -62,15 +62,43 @@ function App(){
  const[reaction,setReaction]=useState({emotion:"warm",gesture:"idle",pace:"normal"});
  const[panel,setPanel]=useState(null);
  const end=useRef(null);
- const generationRef=useRef(null);\n const mediaRef=useRef({stream:null,audio:null,source:null,analyser:null,video:null,canvas:null,lastFrame:null,lastAt:0});\n const [senses,setSenses]=useState({camera:false,microphone:false,volume:0,motion:0,light:0});
- useEffect(()=>save(kernel),[kernel]);\n useEffect(()=>{\n  let alive=true;\n  const m=mediaRef.current;\n  const start=async()=>{\n   if(!navigator.mediaDevices?.getUserMedia)return;\n   try{\n    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:640},height:{ideal:480},frameRate:{ideal:15,max:24}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});\n    if(!alive){stream.getTracks().forEach(t=>t.stop());return}\n    m.stream=stream;\n    const video=document.createElement("video");video.autoplay=true;video.muted=true;video.playsInline=true;video.srcObject=stream;m.video=video;\n    const canvas=document.createElement("canvas");canvas.width=96;canvas.height=72;m.canvas=canvas;\n    const ctx=canvas.getContext("2d",{willReadFrequently:true});\n    const AC=window.AudioContext||window.webkitAudioContext;\n    if(AC){m.audio=new AC();m.source=m.audio.createMediaStreamSource(stream);m.analyser=m.audio.createAnalyser();m.analyser.fftSize=256;m.source.connect(m.analyser)}\n    setSenses(s=>({...s,camera:true,microphone:true}));\n    const tick=()=>{if(!alive)return;let volume=0,motion=0,light=0;\n     if(m.analyser){const data=new Uint8Array(m.analyser.fftSize);m.analyser.getByteTimeDomainData(data);let sum=0;for(const x of data){const n=(x-128)/128;sum+=n*n}volume=Math.min(1,Math.sqrt(sum/data.length)*4)}\n     if(video.readyState>=2){ctx.drawImage(video,0,0,96,72);const pix=ctx.getImageData(0,0,96,72).data;let total=0;for(let i=0;i<pix.length;i+=4)total+=(pix[i]+pix[i+1]+pix[i+2])/3;light=total/(pix.length/4)/255;if(m.lastFrame){let diff=0;for(let i=0;i<pix.length;i+=16)diff+=Math.abs(pix[i]-m.lastFrame[i]);motion=Math.min(1,diff/(pix.length/16*48))}m.lastFrame=new Uint8ClampedArray(pix)}\n     if(performance.now()-m.lastAt>120){m.lastAt=performance.now();setSenses({camera:true,microphone:Boolean(m.analyser),volume,motion,light});}\n     const hot=volume>.28||motion>.22; if(hot)setReaction(r=>r.emotion==="concerned"?r:{emotion:motion>.48?"excited":"curious",gesture:motion>.48?"wave":"idle",pace:volume>.55?"bright":"normal"});\n     requestAnimationFrame(tick)};\n    requestAnimationFrame(tick);\n   }catch(e){console.warn("ambient sensors unavailable",e);setSenses(s=>({...s,camera:false,microphone:false}))}\n  };start();\n  return()=>{alive=false;m.stream?.getTracks().forEach(t=>t.stop());m.audio?.close?.();m.stream=null;m.audio=null;m.source=null;m.analyser=null};\n },[]);
+ const generationRef=useRef(null);
+ const mediaRef=useRef({stream:null,audio:null,source:null,analyser:null,video:null,canvas:null,lastFrame:null,lastAt:0});
+ const [senses,setSenses]=useState({camera:false,microphone:false,volume:0,motion:0,light:0,shake:0,tilt:0,proximity:0,gyro:0});
+ useEffect(()=>save(kernel),[kernel]);
+ useEffect(()=>{
+  let alive=true;
+  const m=mediaRef.current;
+  const start=async()=>{
+   if(!navigator.mediaDevices?.getUserMedia)return;
+   try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:640},height:{ideal:480},frameRate:{ideal:15,max:24}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    if(!alive){stream.getTracks().forEach(t=>t.stop());return}
+    m.stream=stream;
+    const video=document.createElement("video");video.autoplay=true;video.muted=true;video.playsInline=true;video.srcObject=stream;m.video=video;
+    const canvas=document.createElement("canvas");canvas.width=96;canvas.height=72;m.canvas=canvas;
+    const ctx=canvas.getContext("2d",{willReadFrequently:true});
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(AC){m.audio=new AC();m.source=m.audio.createMediaStreamSource(stream);m.analyser=m.audio.createAnalyser();m.analyser.fftSize=256;m.source.connect(m.analyser)}
+    setSenses(s=>({...s,camera:true,microphone:true}));
+    const tick=()=>{if(!alive)return;let volume=0,motion=0,light=0;
+     if(m.analyser){const data=new Uint8Array(m.analyser.fftSize);m.analyser.getByteTimeDomainData(data);let sum=0;for(const x of data){const n=(x-128)/128;sum+=n*n}volume=Math.min(1,Math.sqrt(sum/data.length)*4)}
+     if(video.readyState>=2){ctx.drawImage(video,0,0,96,72);const pix=ctx.getImageData(0,0,96,72).data;let total=0;for(let i=0;i<pix.length;i+=4)total+=(pix[i]+pix[i+1]+pix[i+2])/3;light=total/(pix.length/4)/255;if(m.lastFrame){let diff=0;for(let i=0;i<pix.length;i+=16)diff+=Math.abs(pix[i]-m.lastFrame[i]);motion=Math.min(1,diff/(pix.length/16*48))}m.lastFrame=new Uint8ClampedArray(pix)}
+     if(performance.now()-m.lastAt>120){m.lastAt=performance.now();setSenses({camera:true,microphone:Boolean(m.analyser),volume,motion,light});}
+     const hot=volume>.28||motion>.22; if(hot)setReaction(r=>r.emotion==="concerned"?r:{emotion:motion>.48?"excited":"curious",gesture:motion>.48?"wave":"idle",pace:volume>.55?"bright":"normal"});
+     requestAnimationFrame(tick)};
+    requestAnimationFrame(tick);
+   }catch(e){console.warn("ambient sensors unavailable",e);setSenses(s=>({...s,camera:false,microphone:false}))}
+  };start();
+  return()=>{alive=false;m.stream?.getTracks().forEach(t=>t.stop());m.audio?.close?.();m.stream=null;m.audio=null;m.source=null;m.analyser=null};
+ },[]);
  useEffect(()=>{
   const onModel=e=>setKernel(k=>({...k,localModel:{...k.localModel,...e.detail,ready:Boolean(e.detail?.ready)}}));
   const onError=e=>setRuntimeError(String(e?.error?.message||e?.message||"A runtime error occurred."));
   const onReject=e=>setRuntimeError(String(e?.reason?.message||e?.reason||"An async runtime error occurred."));
   window.addEventListener("miss-model-event",onModel);window.addEventListener("error",onError);window.addEventListener("unhandledrejection",onReject);
   try{const raw=globalThis.MissMinutesNative?.modelStatus?.();if(raw){const d=JSON.parse(raw);setKernel(k=>({...k,localModel:{...k.localModel,...d,ready:Boolean(d.ready)}}))}}catch(e){console.warn("model status unavailable",e)}
-  return()=>{window.removeEventListener("miss-model-event",onModel);window.removeEventListener("error",onError);window.removeEventListener("unhandledrejection",onReject)}
+  return()=>{window.removeEventListener("miss-model-event",onModel);window.removeEventListener("miss-sensor-event",onSensor);window.removeEventListener("error",onError);window.removeEventListener("unhandledrejection",onReject)}
  },[]);
  useEffect(()=>end.current?.scrollIntoView({behavior:"smooth"}),[messages]);
  const speak=t=>{if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.02;u.pitch=1.08;u.onstart=()=>setMode("speaking");u.onend=()=>setMode("idle");window.speechSynthesis.speak(u)};
@@ -89,8 +117,10 @@ function App(){
     const job=bridge.startGeneration(kernel.localModel.path,v);generationRef.current=job;
     const poll=()=>{
      if(generationRef.current!==job)return;
-     let packet="";try{packet=bridge.pollGeneration(job)}catch(e){packet="ERROR\n"+(e?.message||"poll failed")}
-     const cut=packet.indexOf("\n");const status=cut<0?packet:packet.slice(0,cut);const body=cut<0?"":packet.slice(cut+1);
+     let packet="";try{packet=bridge.pollGeneration(job)}catch(e){packet="ERROR
+"+(e?.message||"poll failed")}
+     const cut=packet.indexOf("
+");const status=cut<0?packet:packet.slice(0,cut);const body=cut<0?"":packet.slice(cut+1);
      if(status==="RUNNING"){setMode("thinking");setTimeout(poll,90);return}
      generationRef.current=null;
      const reply=status==="DONE"?parseModelReply(body):{text:status==="ERROR"?body:demoBrain(v,kernel),emotion:"concerned",gesture:"reset",pace:"normal"};
@@ -111,10 +141,9 @@ function App(){
  <main><section className={"character "+mode}><div className="character-stage"><div className="halo"/><MissMinutes3D mode={mode} reaction={reaction}/></div><div className="bubble">{stateText}</div></section>
  <section className="chat"><div className="messages">{messages.map((m,i)=><div key={i} className={"msg "+m.role}><span>{m.role==="assistant"?"MISS MINUTES":"YOU"}</span><p>{m.text}</p></div>)}<div ref={end}/></div>
  <div className="composer"><button className="mic" onClick={()=>setMode("listening")}>🎙</button><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Speak, sugar..."/><button className="send" onClick={()=>send()}>↗</button></div>
- <div className="tools"><button onClick={()=>setPanel("memory")}>Memory · {kernel.memories.length}</button><button onClick={()=>setPanel("evolution")}>Evolution · G{kernel.evolution.generation}</button><button onClick={()=>setPanel("model")}>Local Brain · {kernel.localModel.ready?"READY":"SETUP"}</button><button onClick={evolve}>Let me improve</button><button className="wind" onClick={rollback}>↶ Wind Up the Clock</button><span className="status"><b/> {mode.toUpperCase()} · {senses.camera?"👁":"—"} {senses.microphone?"🎙":"—"}</span></div></section></main>
+ <div className="tools"><button onClick={()=>setPanel("memory")}>Memory · {kernel.memories.length}</button><button onClick={()=>setPanel("evolution")}>Evolution · G{kernel.evolution.generation}</button><button onClick={()=>setPanel("model")}>Local Brain · {kernel.localModel.ready?"READY":"SETUP"}</button><button onClick={evolve}>Let me improve</button><button className="wind" onClick={rollback}>↶ Wind Up the Clock</button><span className="status"><b/> {mode.toUpperCase()} · {senses.camera?"👁":"—"} {senses.microphone?"🎙":"—"} {senses.shake>.55?"📳":""}</span></div></section></main>
  {panel==="framework"&&<Modal title="TVA FRAMEWORK" close={()=>setPanel(null)}><p className="muted">Local editable behavior, checkpointed before evolution.</p><div className="memory"><b>Generation</b><span>{kernel.evolution.generation}</span></div><div className="memory"><b>Snapshots</b><span>{kernel.evolution.snapshots.length}</span></div><div className="memory"><b>Local brain</b><span>{kernel.localModel.ready?"READY":"NOT LOADED"}</span></div><button className="primary" onClick={evolve}>Self-improve</button><button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}
  {panel==="model"&&<Modal title="LOCAL BRAIN" close={()=>setPanel(null)}><p className="muted">Miss Minutes now has a real pre-built base brain path. The default brain is Qwen2.5-0.5B-Instruct Q4_K_M, an Apache-2.0 GGUF. It is downloaded once into app-private storage, then llama.cpp runs it locally on the device.</p><div className="memory"><b>Base brain</b><span>{kernel.localModel.ready?"READY":kernel.localModel.status==="downloading"?`${kernel.localModel.progress||0}%`:"NOT INSTALLED"}</span></div><div className="memory"><b>Model</b><span>{kernel.localModel.name}</span></div><button className="primary" disabled={kernel.localModel.status==="downloading"} onClick={()=>{globalThis.MissMinutesNative?.installBaseModel?.()}}>{kernel.localModel.status==="downloading"?"Downloading…":"Install Base Brain (~491 MB)"}</button><button className="primary" onClick={()=>{globalThis.MissMinutesNative?.pickModel?.()}}>Select another GGUF</button><p className="muted">The base model is deliberately separate from our future Miss Minutes fine-tune. That later model becomes ours; this one is the starting brain.</p></Modal>}
- {panel==="backstory"&&<Modal title="THE FIRST TICK" close={()=>setPanel(null)}><p className="muted">{kernel.backstory?.canon}</p>{(kernel.backstory?.chapters||[]).map((x,i)=><div className="ledger" key={i}><b>CHAPTER {i+1}</b><p>{x}</p></div>)}</Modal>}
  {panel==="memory"&&<Modal title="CHRONAL MEMORY" close={()=>setPanel(null)}><p className="muted">Explicitly stored facts remain on this device.</p>{kernel.memories.map((m,i)=><div className="memory" key={i}>{m}<button onClick={()=>setKernel(k=>({...k,memories:k.memories.filter((_,j)=>j!==i)}))}>×</button></div>)}<button className="primary" onClick={addMemory}>+ Add memory</button></Modal>}
  {panel==="evolution"&&<Modal title="EVOLUTION LEDGER" close={()=>setPanel(null)}><p className="muted">Changes made by the self-improvement layer.</p>{kernel.evolution.ledger.map(x=><div className="ledger" key={x.id}><b>G{x.generation}</b><span>{new Date(x.at).toLocaleString()}</span><p>{x.summary}</p></div>)}{!kernel.evolution.ledger.length&&<p className="muted">No evolutions yet.</p>}<button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}</div>
 }
