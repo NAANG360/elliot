@@ -59,6 +59,7 @@ function App(){
  const[messages,setMessages]=useState([]);
  const[input,setInput]=useState("");
  const[mode,setMode]=useState("idle");
+ const[reaction,setReaction]=useState({emotion:"warm",gesture:"idle",pace:"normal"});
  const[panel,setPanel]=useState(null);
  const end=useRef(null);
  const generationRef=useRef(null);
@@ -77,8 +78,10 @@ function App(){
   v=v.trim();if(!v)return;
   setInput("");setMessages(m=>[...m,{role:"user",text:v}]);setMode("thinking");
   const bridge=globalThis.MissMinutesNative;
+  setReaction({emotion:"curious",gesture:"think",pace:"normal"});
   if(!kernel.localModel.ready&&bridge?.installBaseModel&&kernel.localModel.status!=="downloading"){
-   setMessages(m=>[...m,{role:"assistant",text:"Hold your horses, sugar! My base brain is not installed yet. I am starting the on-device brain download now — about 491 MB. Once it finishes, your messages will run through the local model."}]);
+   setMessages(m=>[...m,{role:"assistant",text:"Hold your horses, sugar! My base brain isn't installed yet. I'm fetching the local starting brain now — about 491 MB. Once it's ready, your messages will run through it right here on the device."}]);
+   setReaction({emotion:"excited",gesture:"wave",pace:"bright"});
    try{bridge.installBaseModel();setMode("idle");return}catch(e){console.warn("base model install unavailable",e)}
   }
   if(kernel.localModel.ready&&bridge?.startGeneration&&bridge?.pollGeneration){
@@ -91,20 +94,21 @@ function App(){
      if(status==="RUNNING"){setMode("thinking");setTimeout(poll,90);return}
      generationRef.current=null;
      const reply=status==="DONE"?parseModelReply(body):{text:status==="ERROR"?body:demoBrain(v,kernel),emotion:"concerned",gesture:"reset",pace:"normal"};
+     setReaction({emotion:reply.emotion||"neutral",gesture:reply.gesture||"idle",pace:reply.pace||"normal"});
      setMessages(m=>[...m,{role:"assistant",text:reply.text}]);setMode("idle");speak(reply.text);
     };
     setTimeout(poll,80);return;
    }catch(e){console.warn("native generation unavailable",e)}
   }
-  setTimeout(()=>{const reply=parseModelReply(demoBrain(v,kernel));setMessages(m=>[...m,{role:"assistant",text:reply.text}]);setMode("idle");speak(reply.text)},220);
+  setTimeout(()=>{const reply=parseModelReply(demoBrain(v,kernel));setReaction({emotion:reply.emotion||"neutral",gesture:reply.gesture||"idle",pace:reply.pace||"normal"});setMessages(m=>[...m,{role:"assistant",text:reply.text}]);setMode("idle");speak(reply.text)},220);
  }
- function evolve(){try{setKernel(old=>{let k=checkpoint(clone(old),"before self-improvement");const n=k.evolution.generation+1;const change={id:uid(),at:new Date().toISOString(),generation:n,summary:"Expanded local evolution capacity and refreshed character guidance.",details:"Self-improvement changed the editable behavior layer only.",reversible:true};k.persona.rules=[...new Set([...k.persona.rules,"Preserve the faithful retro clock-character visual identity while evolving."])];k.evolution.generation=n;k.evolution.ledger=[change,...k.evolution.ledger].slice(0,50);return k});setPanel(null);setMessages(m=>[...m,{role:"assistant",text:"There we go! I improved the framework and tucked the previous timeline into a checkpoint."}])}catch(e){setRuntimeError(e?.message||"Self-improvement failed.")}}
- function rollback(){setKernel(old=>windUp(old));setMessages(m=>[...m,{role:"assistant",text:"Winding the clock... back to the last known-good framework."}]);setMode("idle")}
+ function evolve(){try{setReaction({emotion:"excited",gesture:"celebrate",pace:"bright"});setKernel(old=>{let k=checkpoint(clone(old),"before self-improvement");const n=k.evolution.generation+1;const change={id:uid(),at:new Date().toISOString(),generation:n,summary:"Expanded local evolution capacity and refreshed character guidance.",details:"Self-improvement changed the editable behavior layer only.",reversible:true};k.persona.rules=[...new Set([...k.persona.rules,"Preserve the faithful retro clock-character visual identity while evolving."])];k.evolution.generation=n;k.evolution.ledger=[change,...k.evolution.ledger].slice(0,50);return k});setPanel(null);setMessages(m=>[...m,{role:"assistant",text:"There we go! I improved the framework and tucked the previous timeline into a checkpoint."}])}catch(e){setRuntimeError(e?.message||"Self-improvement failed.")}}
+ function rollback(){setReaction({emotion:"warm",gesture:"reset",pace:"calm"});setKernel(old=>windUp(old));setMessages(m=>[...m,{role:"assistant",text:"Winding the clock... back to the last known-good framework."}]);setMode("idle")}
  function addMemory(){const v=prompt("What should I remember locally?");if(v?.trim())setKernel(k=>({...k,memories:[...k.memories,v.trim()]}))}
  const stateText=mode==="thinking"?"Hmm... let me check the timeline.":mode==="speaking"?"There we go!":mode==="listening"?"I'm listening, sugar.":messages.length?"Awaiting your next temporal anomaly.":"Welcome to the TVA, sugar!";
  return <div className="app"><div className="grain"/>
  <header><div><span className="eyebrow">TIME VARIANCE AUTHORITY</span><h1>MISS MINUTES</h1></div><button className="icon" onClick={()=>setPanel("framework")}>⚙</button></header>
- <main><section className={"character "+mode}><div className="character-stage"><div className="halo"/><MissMinutes3D mode={mode}/></div><div className="bubble">{stateText}</div></section>
+ <main><section className={"character "+mode}><div className="character-stage"><div className="halo"/><MissMinutes3D mode={mode} reaction={reaction}/></div><div className="bubble">{stateText}</div></section>
  <section className="chat"><div className="messages">{messages.map((m,i)=><div key={i} className={"msg "+m.role}><span>{m.role==="assistant"?"MISS MINUTES":"YOU"}</span><p>{m.text}</p></div>)}<div ref={end}/></div>
  <div className="composer"><button className="mic" onClick={()=>setMode("listening")}>🎙</button><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Speak, sugar..."/><button className="send" onClick={()=>send()}>↗</button></div>
  <div className="tools"><button onClick={()=>setPanel("memory")}>Memory · {kernel.memories.length}</button><button onClick={()=>setPanel("evolution")}>Evolution · G{kernel.evolution.generation}</button><button onClick={()=>setPanel("model")}>Local Brain · {kernel.localModel.ready?"READY":"SETUP"}</button><button onClick={evolve}>Let me improve</button><button className="wind" onClick={rollback}>↶ Wind Up the Clock</button><span className="status"><b/> {mode.toUpperCase()}</span></div></section></main>
