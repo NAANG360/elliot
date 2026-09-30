@@ -89,7 +89,7 @@ function App(){
     ];
     return ideas[ctx.generation%ideas.length];
    },
-   onEvent:event=>{if(event.type==="proposal")setKernel(k=>({...k,evolution:{...k.evolution,idle:{...k.evolution.idle,lastProposal:event.proposal}}}))}
+   onEvent:event=>{if(event.type==="committed")setKernel(event.kernel);else if(event.type==="proposal")setKernel(k=>({...k,evolution:{...k.evolution,idle:{...k.evolution.idle,lastProposal:event.proposal}}}));}
   });
   idleRef.current=idle;idle.start();
   return()=>idle.stop();
