@@ -9,14 +9,16 @@ android {
         applicationId="com.naang360.missminutes"
         minSdk=28
         targetSdk=36
-        versionCode=7
-        versionName="0.3.3"
+        versionCode=8
+        versionName="0.4.0"
     }
     compileOptions {
         sourceCompatibility=JavaVersion.VERSION_17
         targetCompatibility=JavaVersion.VERSION_17
     }
     buildTypes { release { isMinifyEnabled=false } }
+    externalNativeBuild { cmake { path=file("src/main/cpp/CMakeLists.txt") } }
+    ndk { abiFilters += listOf("arm64-v8a") }
     dependencies { implementation("androidx.webkit:webkit:1.14.0") }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
