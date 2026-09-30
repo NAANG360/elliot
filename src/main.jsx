@@ -67,14 +67,14 @@ function MissMinutes({mode}){
  </svg>
 }
 
-function App(){
+function App(){\n const modelEvent=useRef(null);
  const[kernel,setKernel]=useState(load);
  const[messages,setMessages]=useState([]);
  const[input,setInput]=useState("");
  const[mode,setMode]=useState("idle");
  const[panel,setPanel]=useState(null);
  const end=useRef(null);
- useEffect(()=>save(kernel),[kernel]);
+ useEffect(()=>save(kernel),[kernel]);\n useEffect(()=>{const fn=e=>setKernel(k=>({...k,localModel:{name:e.detail?.name||"Local GGUF",path:e.detail?.path||"",ready:Boolean(e.detail?.ready)}}));window.addEventListener("miss-model-ready",fn);return()=>window.removeEventListener("miss-model-ready",fn)},[]);
  useEffect(()=>end.current?.scrollIntoView({behavior:"smooth"}),[messages]);
  const speak=t=>{if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.02;u.pitch=1.08;u.onstart=()=>setMode("speaking");u.onend=()=>setMode("idle");window.speechSynthesis.speak(u)};
  function send(v=input){v=v.trim();if(!v)return;setInput("");setMessages(m=>[...m,{role:"user",text:v}]);setMode("thinking");setTimeout(()=>{const r=demoBrain(v,kernel);setMessages(m=>[...m,{role:"assistant",text:r}]);setMode("idle");speak(r)},220)}
@@ -89,7 +89,7 @@ function App(){
  <div className="composer"><button className="mic" onClick={()=>setMode("listening")}>🎙</button><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Speak, sugar..."/><button className="send" onClick={()=>send()}>↗</button></div>
  <div className="tools"><button onClick={()=>setPanel("memory")}>Memory · {kernel.memories.length}</button><button onClick={()=>setPanel("evolution")}>Evolution · G{kernel.evolution.generation}</button><button onClick={()=>setPanel("model")}>Local Brain · {kernel.localModel.ready?"READY":"SETUP"}</button><button onClick={evolve}>Let me improve</button><button className="wind" onClick={rollback}>↶ Wind Up the Clock</button><span className="status"><b/> {mode.toUpperCase()}</span></div></section></main>
  {panel==="framework"&&<Modal title="TVA FRAMEWORK" close={()=>setPanel(null)}><p className="muted">Local editable behavior, checkpointed before evolution.</p><div className="memory"><b>Generation</b><span>{kernel.evolution.generation}</span></div><div className="memory"><b>Snapshots</b><span>{kernel.evolution.snapshots.length}</span></div><div className="memory"><b>Local brain</b><span>{kernel.localModel.ready?"READY":"NOT LOADED"}</span></div><button className="primary" onClick={evolve}>Self-improve</button><button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}
- {panel==="model"&&<Modal title="LOCAL BRAIN" close={()=>setPanel(null)}><p className="muted">The inference boundary is on-device. GGUF models are kept in app-private storage; no chat request needs a remote AI API.</p><div className="memory"><b>Model</b><span>{kernel.localModel.name}</span></div><button className="primary" onClick={()=>{const p=globalThis.MissMinutesNative?.pickModel?.();if(p)setKernel(k=>({...k,localModel:{...k.localModel,name:p,path:p,ready:true}}))}}>Select GGUF model</button><p className="muted">Runtime adapter is prepared for a native llama.cpp backend; model files remain separate so the APK does not become a multi-gigabyte download.</p></Modal>}
+ {panel==="model"&&<Modal title="LOCAL BRAIN" close={()=>setPanel(null)}><p className="muted">The inference boundary is on-device. GGUF models are kept in app-private storage; no chat request needs a remote AI API.</p><div className="memory"><b>Model</b><span>{kernel.localModel.name}</span></div><button className="primary" onClick={()=>{globalThis.MissMinutesNative?.pickModel?.()}}>Select GGUF model</button><p className="muted">Model storage is wired to Android. Native llama.cpp inference is the next backend boundary; selecting a GGUF does not pretend that inference is already active.</p></Modal>}
  {panel==="memory"&&<Modal title="CHRONAL MEMORY" close={()=>setPanel(null)}><p className="muted">Explicitly stored facts remain on this device.</p>{kernel.memories.map((m,i)=><div className="memory" key={i}>{m}<button onClick={()=>setKernel(k=>({...k,memories:k.memories.filter((_,j)=>j!==i)}))}>×</button></div>)}<button className="primary" onClick={addMemory}>+ Add memory</button></Modal>}
  {panel==="evolution"&&<Modal title="EVOLUTION LEDGER" close={()=>setPanel(null)}><p className="muted">Changes made by the self-improvement layer.</p>{kernel.evolution.ledger.map(x=><div className="ledger" key={x.id}><b>G{x.generation}</b><span>{new Date(x.at).toLocaleString()}</span><p>{x.summary}</p></div>)}{!kernel.evolution.ledger.length&&<p className="muted">No evolutions yet.</p>}<button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}</div>
 }
