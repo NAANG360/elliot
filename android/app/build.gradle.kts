@@ -9,15 +9,28 @@ android {
         applicationId="com.naang360.missminutes"
         minSdk=28
         targetSdk=36
-        versionCode=15
-        versionName="0.5.3"
+        versionCode=16
+        versionName="0.5.4"
         ndk { abiFilters += listOf("arm64-v8a") }
     }
     compileOptions {
         sourceCompatibility=JavaVersion.VERSION_17
         targetCompatibility=JavaVersion.VERSION_17
     }
-    buildTypes { release { isMinifyEnabled=false } }
+    signingConfigs {
+        create("release") {
+            storeFile=file("miss-minutes-release.jks")
+            storePassword="***REMOVED***"
+            keyAlias="missminutes"
+            keyPassword="***REMOVED***"
+        }
+    }
+    buildTypes {
+        release {
+            isMinifyEnabled=false
+            signingConfig=signingConfigs.getByName("release")
+        }
+    }
     externalNativeBuild { cmake { path=file("src/main/cpp/CMakeLists.txt") } }
     dependencies { implementation("androidx.webkit:webkit:1.14.0") }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
