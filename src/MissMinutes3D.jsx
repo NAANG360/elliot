@@ -46,15 +46,15 @@ export default function MissMinutes3D({mode="idle",reaction={emotion:"neutral",g
   const white=mat(C.white,.62),bootMat=mat(C.boot,.7);
 
   // The face is intentionally thick and slightly bevelled rather than a flat disk.
-  const body=new THREE.Mesh(new THREE.CylinderGeometry(1.36,1.36,.26,96),orange);
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(1.34,1.34,.24,96),orange);
   body.rotation.x=Math.PI/2;
   clockGroup.add(body);
 
-  const rearRim=new THREE.Mesh(new THREE.TorusGeometry(1.28,.095,12,96),edge);
-  rearRim.rotation.x=Math.PI/2;rearRim.position.z=-.11;clockGroup.add(rearRim);
+  const rearRim=new THREE.Mesh(new THREE.TorusGeometry(1.28,.075,12,96),edge);
+  rearRim.position.z=-.13;clockGroup.add(rearRim);
 
-  const frontRim=new THREE.Mesh(new THREE.TorusGeometry(1.285,.045,10,96),edge);
-  frontRim.rotation.x=Math.PI/2;frontRim.position.z=.145;clockGroup.add(frontRim);
+  const frontRim=new THREE.Mesh(new THREE.TorusGeometry(1.30,.038,10,96),edge);
+  frontRim.position.z=.185;clockGroup.add(frontRim);
 
   // Sparse, bold clock ticks matching the original silhouette.
   const ticks=new THREE.Group();clockGroup.add(ticks);
@@ -74,14 +74,14 @@ export default function MissMinutes3D({mode="idle",reaction={emotion:"neutral",g
   // Expressive eyes: white almond-ish ovals, dark pupils, and a proper lash line.
   const eyeL=new THREE.Mesh(new THREE.SphereGeometry(.34,40,28),white);
   const eyeR=eyeL.clone();
-  eyeL.scale.set(.63,1.22,.34);eyeR.scale.copy(eyeL.scale);
-  eyeL.position.set(-.47,.27,.34);eyeR.position.set(.47,.27,.34);
+  eyeL.scale.set(.60,1.10,.32);eyeR.scale.copy(eyeL.scale);
+  eyeL.position.set(-.43,.28,.39);eyeR.position.set(.43,.28,.39);
   clockGroup.add(eyeL,eyeR);
 
   const pupilL=new THREE.Mesh(new THREE.SphereGeometry(.145,28,20),dark);
   const pupilR=pupilL.clone();
-  pupilL.scale.set(.62,1.32,.45);pupilR.scale.copy(pupilL.scale);
-  pupilL.position.set(-.47,.26,.60);pupilR.position.set(.47,.26,.60);
+  pupilL.scale.set(.66,1.18,.44);pupilR.scale.copy(pupilL.scale);
+  pupilL.position.set(-.43,.25,.64);pupilR.position.set(.43,.25,.64);
   clockGroup.add(pupilL,pupilR);
 
   const lashes=new THREE.Group();
@@ -95,13 +95,14 @@ export default function MissMinutes3D({mode="idle",reaction={emotion:"neutral",g
   }
   clockGroup.add(lashes);
 
-  const nose=new THREE.Mesh(new THREE.SphereGeometry(.057,20,14),dark);
-  nose.position.set(0,-.02,.61);clockGroup.add(nose);
+  const nose=new THREE.Mesh(new THREE.SphereGeometry(.052,20,14),dark);
+  nose.position.set(0,-.01,.67);clockGroup.add(nose);
 
-  const mouth=new THREE.Mesh(new THREE.TorusGeometry(.235,.032,10,36,Math.PI),dark);
-  mouth.position.set(0,-.42,.57);mouth.rotation.z=Math.PI;clockGroup.add(mouth);
-  const mouthInner=new THREE.Mesh(new THREE.CircleGeometry(.15,32),dark);
-  mouthInner.position.set(0,-.42,.555);mouthInner.scale.y=.18;clockGroup.add(mouthInner);
+  const smileCurve=new THREE.QuadraticBezierCurve3(new THREE.Vector3(-.22,-.34,.64),new THREE.Vector3(0,-.45,.69),new THREE.Vector3(.22,-.34,.64));
+  const mouth=new THREE.Mesh(new THREE.TubeGeometry(smileCurve,20,.027,10,false),dark);
+  clockGroup.add(mouth);
+  const mouthGlow=new THREE.Mesh(new THREE.TubeGeometry(smileCurve,20,.008,8,false),white);
+  mouthGlow.position.z=.006;clockGroup.add(mouthGlow);
 
   // Thin orange arms with the characteristic dark cuff stripes.
   const makeArm=side=>{
@@ -206,14 +207,14 @@ export default function MissMinutes3D({mode="idle",reaction={emotion:"neutral",g
    root.position.y=.12+(s.mode==="thinking"?Math.sin(t*.006)*.055:Math.sin(t*.0021)*.018);
 
    const ey=s.blinking?.055:1;
-   eyeL.scale.y=1.22*ey;eyeR.scale.y=1.22*ey;
-   pupilL.scale.y=1.32*ey;pupilR.scale.y=1.32*ey;
+   eyeL.scale.y=1.10*ey;eyeR.scale.y=1.10*ey;
+   pupilL.scale.y=1.18*ey;pupilR.scale.y=1.18*ey;
    lashes.scale.y=ey;
 
-   pupilL.position.x=-.47+s.targetX*.12;pupilR.position.x=.47+s.targetX*.12;
-   pupilL.position.y=.26+s.targetY*.08;pupilR.position.y=.26+s.targetY*.08;
+   pupilL.position.x=-.43+s.targetX*.11;pupilR.position.x=.43+s.targetX*.11;
+   pupilL.position.y=.25+s.targetY*.08;pupilR.position.y=.25+s.targetY*.08;
 
-   mouth.scale.y=s.mode==="speaking"?1+Math.abs(Math.sin(t*.028))*.30:1;
+   mouth.scale.y=s.mode==="speaking"?1+Math.abs(Math.sin(t*.028))*.22:1;mouthGlow.scale.y=mouth.scale.y;
    armL.rotation.z=-.12+((gesture==="wave"||gesture==="celebrate")?Math.sin(t*.010)*.42:(s.mode==="listening"?Math.sin(t*.008)*.12:Math.sin(t*.002)*.025));
    armR.rotation.z=.12+((gesture==="point"?Math.sin(t*.007)*.18:(gesture==="wave"||gesture==="celebrate")?Math.sin(t*.010)*.42:(s.mode==="speaking"?Math.sin(t*.009)*.18:Math.sin(t*.0023)*.025)));
    const glow=(rx.emotion==="excited"||rx.emotion==="warm")?.16:.10;
