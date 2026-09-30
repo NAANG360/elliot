@@ -17,7 +17,7 @@ const DEFAULT_KERNEL={
  localModel:{name:"No base brain installed",path:"",ready:false,status:"none",progress:0,error:"",source:"Qwen2.5-0.5B-Instruct Q4_K_M"}
 };
 
-function load(){try{return JSON.parse(localStorage.getItem(STATE))||structuredClone(DEFAULT_KERNEL)}catch{return structuredClone(DEFAULT_KERNEL)}}
+function load(){try{const current=localStorage.getItem(STATE);if(current)return JSON.parse(current);const legacy=localStorage.getItem("miss-minutes-kernel-v8");if(legacy){const migrated=JSON.parse(legacy);migrated.evolution={...DEFAULT_KERNEL.evolution,...(migrated.evolution||{}),ledger:[...(migrated.evolution?.ledger||[])],snapshots:[],lastGood:null};migrated.skills=migrated.skills||DEFAULT_KERNEL.skills;localStorage.setItem(STATE,JSON.stringify(migrated));return migrated}return structuredClone(DEFAULT_KERNEL)}catch{return structuredClone(DEFAULT_KERNEL)}}
 function save(k){try{localStorage.setItem(STATE,JSON.stringify(k))}catch(e){console.warn("kernel save failed",e)}}
 function clone(v){return JSON.parse(JSON.stringify(v))}
 function checkpoint(k,reason="before evolution"){const safe=clone(k);safe.evolution={...safe.evolution,snapshots:[],lastGood:null};const snap={id:uid(),at:new Date().toISOString(),reason,kernel:safe};k.evolution.snapshots=[snap,...k.evolution.snapshots].slice(0,12);k.evolution.lastGood=snap.id;return k}
