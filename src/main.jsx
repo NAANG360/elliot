@@ -67,14 +67,14 @@ function MissMinutes({mode}){
  </svg>
 }
 
-function App(){\n const modelEvent=useRef(null);
+function App(){
  const[kernel,setKernel]=useState(load);
  const[messages,setMessages]=useState([]);
  const[input,setInput]=useState("");
  const[mode,setMode]=useState("idle");
  const[panel,setPanel]=useState(null);
  const end=useRef(null);
- useEffect(()=>save(kernel),[kernel]);\n useEffect(()=>{const fn=e=>setKernel(k=>({...k,localModel:{name:e.detail?.name||"Local GGUF",path:e.detail?.path||"",ready:Boolean(e.detail?.ready)}}));window.addEventListener("miss-model-ready",fn);return()=>window.removeEventListener("miss-model-ready",fn)},[]);
+ useEffect(()=>save(kernel),[kernel]); useEffect(()=>{const fn=e=>setKernel(k=>({...k,localModel:{name:e.detail?.name||"Local GGUF",path:e.detail?.path||"",ready:Boolean(e.detail?.ready)}}));window.addEventListener("miss-model-ready",fn);return()=>window.removeEventListener("miss-model-ready",fn)},[]);
  useEffect(()=>end.current?.scrollIntoView({behavior:"smooth"}),[messages]);
  const speak=t=>{if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.02;u.pitch=1.08;u.onstart=()=>setMode("speaking");u.onend=()=>setMode("idle");window.speechSynthesis.speak(u)};
  function send(v=input){v=v.trim();if(!v)return;setInput("");setMessages(m=>[...m,{role:"user",text:v}]);setMode("thinking");setTimeout(()=>{const r=demoBrain(v,kernel);setMessages(m=>[...m,{role:"assistant",text:r}]);setMode("idle");speak(r)},220)}
