@@ -216,7 +216,7 @@ export default function MissMinutes3D({mode="idle",reaction={emotion:"neutral",g
    mouth.scale.y=s.mode==="speaking"?1+Math.abs(Math.sin(t*.028))*.30:1;
    armL.rotation.z=-.12+((gesture==="wave"||gesture==="celebrate")?Math.sin(t*.010)*.42:(s.mode==="listening"?Math.sin(t*.008)*.12:Math.sin(t*.002)*.025));
    armR.rotation.z=.12+((gesture==="point"?Math.sin(t*.007)*.18:(gesture==="wave"||gesture==="celebrate")?Math.sin(t*.010)*.42:(s.mode==="speaking"?Math.sin(t*.009)*.18:Math.sin(t*.0023)*.025)));
-   const glow=rx.emotion==="excited"||rx.emotion==="warm"?.16:.10;
+   const glow=(rx.emotion==="excited"||rx.emotion==="warm")?.16:.10;
    halo.material.opacity=glow;
    halo.rotation.z=t*.00035;
    scan.scale.setScalar(1+Math.sin(t*.002)*.025);

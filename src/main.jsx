@@ -59,7 +59,6 @@ function App(){
  const[panel,setPanel]=useState(null);
  const end=useRef(null);
  const generationRef=useRef(null);
- const[reaction,setReaction]=useState({emotion:"neutral",gesture:"idle",pace:"normal"});
  useEffect(()=>save(kernel),[kernel]); useEffect(()=>{const fn=e=>setKernel(k=>({...k,localModel:{name:e.detail?.name||"Local GGUF",path:e.detail?.path||"",ready:Boolean(e.detail?.ready)}}));window.addEventListener("miss-model-ready",fn);return()=>window.removeEventListener("miss-model-ready",fn)},[]);
  useEffect(()=>end.current?.scrollIntoView({behavior:"smooth"}),[messages]);
  const speak=t=>{if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.02;u.pitch=1.08;u.onstart=()=>setMode("speaking");u.onend=()=>setMode("idle");window.speechSynthesis.speak(u)};
@@ -77,12 +76,12 @@ function App(){
      if(status==="RUNNING"){setMode("thinking");setTimeout(poll,90);return}
      generationRef.current=null;
      const reply=status==="DONE"?parseModelReply(body):{text:status==="ERROR"?body:demoBrain(v,kernel),emotion:"concerned",gesture:"reset",pace:"normal"};
-     setReaction(reply);setMessages(m=>[...m,{role:"assistant",text:reply.text}]);setMode("idle");speak(reply.text);
+     setMessages(m=>[...m,{role:"assistant",text:reply.text}]);setMode("idle");speak(reply.text);
     };
     setTimeout(poll,80);return;
    }catch(e){console.warn("native generation unavailable",e)}
   }
-  setTimeout(()=>{const reply=parseModelReply(demoBrain(v,kernel));setReaction(reply);setMessages(m=>[...m,{role:"assistant",text:reply.text}]);setMode("idle");speak(reply.text)},220);
+  setTimeout(()=>{const reply=parseModelReply(demoBrain(v,kernel));setMessages(m=>[...m,{role:"assistant",text:reply.text}]);setMode("idle");speak(reply.text)},220);
  }
  function evolve(){setKernel(old=>{let k=checkpoint(clone(old),"before self-improvement");const n=k.evolution.generation+1;const change={id:crypto.randomUUID(),at:new Date().toISOString(),generation:n,summary:"Expanded local evolution capacity and refreshed character guidance.",details:"Self-improvement changed the editable behavior layer only.",reversible:true};k.persona.rules=[...new Set([...k.persona.rules,"Preserve the retro clock-character visual identity while evolving."])];k.evolution.generation=n;k.evolution.ledger=[change,...k.evolution.ledger].slice(0,50);return k});setMessages(m=>[...m,{role:"assistant",text:"There we go! I improved the framework and tucked the previous timeline into a checkpoint."}])}
  function rollback(){setKernel(old=>windUp(old));setMessages(m=>[...m,{role:"assistant",text:"Winding the clock... back to the last known-good framework."}]);setMode("idle")}
@@ -90,7 +89,7 @@ function App(){
  const stateText=mode==="thinking"?"Hmm... let me check the timeline.":mode==="speaking"?"There we go!":mode==="listening"?"I'm listening, sugar.":messages.length?"Awaiting your next temporal anomaly.":"Welcome to the TVA, sugar!";
  return <div className="app"><div className="grain"/>
  <header><div><span className="eyebrow">TIME VARIANCE AUTHORITY</span><h1>MISS MINUTES</h1></div><button className="icon" onClick={()=>setPanel("framework")}>⚙</button></header>
- <main><section className={"character "+mode}><div className="character-stage"><div className="halo"/><MissMinutes3D mode={mode} reaction={reaction}/></div><div className="bubble">{stateText}</div></section>
+ <main><section className={"character "+mode}><div className="character-stage"><div className="halo"/><MissMinutes3D mode={mode}/></div><div className="bubble">{stateText}</div></section>
  <section className="chat"><div className="messages">{messages.map((m,i)=><div key={i} className={"msg "+m.role}><span>{m.role==="assistant"?"MISS MINUTES":"YOU"}</span><p>{m.text}</p></div>)}<div ref={end}/></div>
  <div className="composer"><button className="mic" onClick={()=>setMode("listening")}>🎙</button><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Speak, sugar..."/><button className="send" onClick={()=>send()}>↗</button></div>
  <div className="tools"><button onClick={()=>setPanel("memory")}>Memory · {kernel.memories.length}</button><button onClick={()=>setPanel("evolution")}>Evolution · G{kernel.evolution.generation}</button><button onClick={()=>setPanel("model")}>Local Brain · {kernel.localModel.ready?"READY":"SETUP"}</button><button onClick={evolve}>Let me improve</button><button className="wind" onClick={rollback}>↶ Wind Up the Clock</button><span className="status"><b/> {mode.toUpperCase()}</span></div></section></main>
