@@ -15,9 +15,10 @@ function mat(color,roughness=.75){return new THREE.MeshStandardMaterial({color,r
 function cyl(radius,height,material,segments=48){return new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,height,segments),material)}
 function capsule(radius,length,material){return new THREE.Mesh(new THREE.CapsuleGeometry(radius,length,8,16),material)}
 
-export default function MissMinutes3D({mode="idle"}){
- const mount=useRef(null),state=useRef({mode,targetX:0,targetY:0,blinking:false});
+export default function MissMinutes3D({mode="idle",reaction={emotion:"neutral",gesture:"idle",pace:"normal"}}){
+ const mount=useRef(null),state=useRef({mode,reaction,targetX:0,targetY:0,blinking:false});
  useEffect(()=>{state.current.mode=mode},[mode]);
+ useEffect(()=>{state.current.reaction=reaction},[reaction]);
 
  useEffect(()=>{
   const el=mount.current;if(!el)return;
@@ -193,11 +194,14 @@ export default function MissMinutes3D({mode="idle"}){
   addEventListener("resize",resize);el.addEventListener("pointermove",move);el.addEventListener("pointerleave",leave);
 
   const frame=t=>{
-   const s=state.current,dt=Math.min(.04,(t-last)/1000);last=t;
+   const s=state.current,rx=s.reaction||{},dt=Math.min(.04,(t-last)/1000);last=t;
    if(!s.blinking&&t>=blinkAt){s.blinking=true;blinkEnd=t+115}
    if(s.blinking&&t>=blinkEnd){s.blinking=false;blinkAt=t+1800+Math.random()*2600}
 
+   const gesture=rx.gesture||"idle";
+   const energy=rx.pace==="bright"?.030:rx.pace==="calm"?.012:.020;
    root.rotation.y+=(s.targetX-root.rotation.y)*dt*3.6;
+   if(gesture==="wave"||gesture==="celebrate")root.rotation.z=Math.sin(t*.006)*energy;else if(gesture==="think")root.rotation.z=Math.sin(t*.002)*.012;else root.rotation.z*=.94;
    root.rotation.x+=(s.targetY*.6-root.rotation.x)*dt*3.6;
    root.position.y=.12+(s.mode==="thinking"?Math.sin(t*.006)*.055:Math.sin(t*.0021)*.018);
 
@@ -210,8 +214,10 @@ export default function MissMinutes3D({mode="idle"}){
    pupilL.position.y=.26+s.targetY*.08;pupilR.position.y=.26+s.targetY*.08;
 
    mouth.scale.y=s.mode==="speaking"?1+Math.abs(Math.sin(t*.028))*.30:1;
-   armL.rotation.z=-.12+(s.mode==="listening"?Math.sin(t*.008)*.12:Math.sin(t*.002)*.025);
-   armR.rotation.z=.12+(s.mode==="speaking"?Math.sin(t*.009)*.18:Math.sin(t*.0023)*.025);
+   armL.rotation.z=-.12+((gesture==="wave"||gesture==="celebrate")?Math.sin(t*.010)*.42:(s.mode==="listening"?Math.sin(t*.008)*.12:Math.sin(t*.002)*.025));
+   armR.rotation.z=.12+((gesture==="point"?Math.sin(t*.007)*.18:(gesture==="wave"||gesture==="celebrate")?Math.sin(t*.010)*.42:(s.mode==="speaking"?Math.sin(t*.009)*.18:Math.sin(t*.0023)*.025)));
+   const glow=rx.emotion==="excited"||rx.emotion==="warm"?.16:.10;
+   halo.material.opacity=glow;
    halo.rotation.z=t*.00035;
    scan.scale.setScalar(1+Math.sin(t*.002)*.025);
    particles.rotation.y=t*.00010;
