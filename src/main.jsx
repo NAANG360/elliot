@@ -3,26 +3,27 @@ import{createRoot}from"react-dom/client";
 import"./style.css";
 import MissMinutes3D from "./MissMinutes3D.jsx";
 
-const STATE="miss-minutes-kernel-v4";
+const STATE="miss-minutes-kernel-v5";
+const uid=()=>globalThis.crypto?.randomUUID?.()||("chronal-"+Date.now()+"-"+Math.random().toString(16).slice(2));
 const IDENTITY={name:"Miss Minutes",role:"your local chronal companion",identityAnchor:"I am Miss Minutes. This is my name and role inside this application.",style:"cheerful retro-cartoon clock mascot; theatrical, warm, mischievous, precise",boundaries:"Fan-made local assistant; not official Marvel/TVA software."};
 const DEFAULT_KERNEL={
  persona:{...IDENTITY,tone:"cheerful, theatrical, mischievous, warmly Southern-coded, helpful with a tiny ominous edge",rules:["Stay playful and precise.","Treat the timeline as a playful metaphor, not a claim of supernatural authority.","Never pretend to be official Marvel/TVA software.","Do not reproduce dialogue from the show verbatim.","Prefer helpful action over empty banter.","Preserve the character's warm retro-cartoon visual language."]},
  memories:[],
  skills:[{id:"clock-check",name:"Clock Check",description:"Report the current local time."},{id:"timeline-note",name:"Timeline Note",description:"Turn a user-provided note into a remembered local fact."}],
  evolution:{generation:0,ledger:[],snapshots:[],lastGood:null},
- localModel:{name:"No model selected",path:"",ready:false}
+ localModel:{name:"No base brain installed",path:"",ready:false,status:"none",progress:0,error:"",source:"Qwen2.5-0.5B-Instruct Q4_K_M"}
 };
 
 function load(){try{return JSON.parse(localStorage.getItem(STATE))||structuredClone(DEFAULT_KERNEL)}catch{return structuredClone(DEFAULT_KERNEL)}}
-function save(k){localStorage.setItem(STATE,JSON.stringify(k))}
+function save(k){try{localStorage.setItem(STATE,JSON.stringify(k))}catch(e){console.warn("kernel save failed",e)}}
 function clone(v){return JSON.parse(JSON.stringify(v))}
-function checkpoint(k,reason="before evolution"){const snap={id:crypto.randomUUID(),at:new Date().toISOString(),reason,kernel:clone(k)};k.evolution.snapshots=[snap,...k.evolution.snapshots].slice(0,12);k.evolution.lastGood=snap.id;return k}
+function checkpoint(k,reason="before evolution"){const safe=clone(k);safe.evolution={...safe.evolution,snapshots:[],lastGood:null};const snap={id:uid(),at:new Date().toISOString(),reason,kernel:safe};k.evolution.snapshots=[snap,...k.evolution.snapshots].slice(0,12);k.evolution.lastGood=snap.id;return k}
 function windUp(k){const id=k.evolution.lastGood;const snap=k.evolution.snapshots.find(s=>s.id===id)||k.evolution.snapshots[0];return snap?clone(snap.kernel):k}
 function applyFrameworkPatch(k,patch,summary="self-improvement"){
  const next=checkpoint(clone(k),"before "+summary);
  const apply=(target,path,value)=>{let o=target;for(let i=0;i<path.length-1;i++){const key=path[i];if(!o[key]||typeof o[key]!=="object")o[key]={};o=o[key]}o[path[path.length-1]]=value};
  for(const op of patch||[]){if(!Array.isArray(op.path)||!op.path.length)continue;if(op.op==="set")apply(next,op.path,clone(op.value));if(op.op==="delete"){let o=next;for(let i=0;i<op.path.length-1;i++)o=o?.[op.path[i]];if(o&&typeof o==="object")delete o[op.path[op.path.length-1]]}}
- const entry={id:crypto.randomUUID(),at:new Date().toISOString(),generation:next.evolution.generation+1,summary,details:"Editable framework patch",patch:clone(patch),reversible:true};
+ const entry={id:uid(),at:new Date().toISOString(),generation:next.evolution.generation+1,summary,details:"Editable framework patch",patch:clone(patch),reversible:true};
  next.evolution.generation++;next.evolution.ledger=[entry,...next.evolution.ledger].slice(0,50);return next;
 }
 window.MissMinutesFramework={
@@ -54,19 +55,32 @@ function demoBrain(text,kernel){
 
 function App(){
  const[kernel,setKernel]=useState(load);
+ const[runtimeError,setRuntimeError]=useState("");
  const[messages,setMessages]=useState([]);
  const[input,setInput]=useState("");
  const[mode,setMode]=useState("idle");
  const[panel,setPanel]=useState(null);
  const end=useRef(null);
  const generationRef=useRef(null);
- useEffect(()=>save(kernel),[kernel]); useEffect(()=>{const fn=e=>setKernel(k=>({...k,localModel:{name:e.detail?.name||"Local GGUF",path:e.detail?.path||"",ready:Boolean(e.detail?.ready)}}));window.addEventListener("miss-model-ready",fn);return()=>window.removeEventListener("miss-model-ready",fn)},[]);
+ useEffect(()=>save(kernel),[kernel]);
+ useEffect(()=>{
+  const onModel=e=>setKernel(k=>({...k,localModel:{...k.localModel,...e.detail,ready:Boolean(e.detail?.ready)}}));
+  const onError=e=>setRuntimeError(String(e?.error?.message||e?.message||"A runtime error occurred."));
+  const onReject=e=>setRuntimeError(String(e?.reason?.message||e?.reason||"An async runtime error occurred."));
+  window.addEventListener("miss-model-event",onModel);window.addEventListener("error",onError);window.addEventListener("unhandledrejection",onReject);
+  try{const raw=globalThis.MissMinutesNative?.modelStatus?.();if(raw){const d=JSON.parse(raw);setKernel(k=>({...k,localModel:{...k.localModel,...d,ready:Boolean(d.ready)}}))}}catch(e){console.warn("model status unavailable",e)}
+  return()=>{window.removeEventListener("miss-model-event",onModel);window.removeEventListener("error",onError);window.removeEventListener("unhandledrejection",onReject)}
+ },[]);
  useEffect(()=>end.current?.scrollIntoView({behavior:"smooth"}),[messages]);
  const speak=t=>{if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.02;u.pitch=1.08;u.onstart=()=>setMode("speaking");u.onend=()=>setMode("idle");window.speechSynthesis.speak(u)};
  function send(v=input){
   v=v.trim();if(!v)return;
   setInput("");setMessages(m=>[...m,{role:"user",text:v}]);setMode("thinking");
   const bridge=globalThis.MissMinutesNative;
+  if(!kernel.localModel.ready&&bridge?.installBaseModel&&kernel.localModel.status!=="downloading"){
+   setMessages(m=>[...m,{role:"assistant",text:"Hold your horses, sugar! My base brain is not installed yet. I am starting the on-device brain download now — about 491 MB. Once it finishes, your messages will run through the local model."}]);
+   try{bridge.installBaseModel();setMode("idle");return}catch(e){console.warn("base model install unavailable",e)}
+  }
   if(kernel.localModel.ready&&bridge?.startGeneration&&bridge?.pollGeneration){
    try{
     const job=bridge.startGeneration(kernel.localModel.path,v);generationRef.current=job;
@@ -95,9 +109,10 @@ function App(){
  <div className="composer"><button className="mic" onClick={()=>setMode("listening")}>🎙</button><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Speak, sugar..."/><button className="send" onClick={()=>send()}>↗</button></div>
  <div className="tools"><button onClick={()=>setPanel("memory")}>Memory · {kernel.memories.length}</button><button onClick={()=>setPanel("evolution")}>Evolution · G{kernel.evolution.generation}</button><button onClick={()=>setPanel("model")}>Local Brain · {kernel.localModel.ready?"READY":"SETUP"}</button><button onClick={evolve}>Let me improve</button><button className="wind" onClick={rollback}>↶ Wind Up the Clock</button><span className="status"><b/> {mode.toUpperCase()}</span></div></section></main>
  {panel==="framework"&&<Modal title="TVA FRAMEWORK" close={()=>setPanel(null)}><p className="muted">Local editable behavior, checkpointed before evolution.</p><div className="memory"><b>Generation</b><span>{kernel.evolution.generation}</span></div><div className="memory"><b>Snapshots</b><span>{kernel.evolution.snapshots.length}</span></div><div className="memory"><b>Local brain</b><span>{kernel.localModel.ready?"READY":"NOT LOADED"}</span></div><button className="primary" onClick={evolve}>Self-improve</button><button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}
- {panel==="model"&&<Modal title="LOCAL BRAIN" close={()=>setPanel(null)}><p className="muted">The inference boundary is on-device. GGUF models are kept in app-private storage; no chat request needs a remote AI API. The native engine is llama.cpp; Miss Minutes adds its own persona, memory, framework and evolution layer around it.</p><div className="memory"><b>Model</b><span>{kernel.localModel.name}</span></div><button className="primary" onClick={()=>{globalThis.MissMinutesNative?.pickModel?.()}}>Select GGUF model</button><p className="muted">Model storage is wired to Android. Native llama.cpp inference is the next backend boundary; selecting a GGUF does not pretend that inference is already active.</p></Modal>}
+ {panel==="model"&&<Modal title="LOCAL BRAIN" close={()=>setPanel(null)}><p className="muted">Miss Minutes now has a real pre-built base brain path. The default brain is Qwen2.5-0.5B-Instruct Q4_K_M, an Apache-2.0 GGUF. It is downloaded once into app-private storage, then llama.cpp runs it locally on the device.</p><div className="memory"><b>Base brain</b><span>{kernel.localModel.ready?"READY":kernel.localModel.status==="downloading"?`${kernel.localModel.progress||0}%`:"NOT INSTALLED"}</span></div><div className="memory"><b>Model</b><span>{kernel.localModel.name}</span></div><button className="primary" disabled={kernel.localModel.status==="downloading"} onClick={()=>{globalThis.MissMinutesNative?.installBaseModel?.()}}>{kernel.localModel.status==="downloading"?"Downloading…":"Install Base Brain (~491 MB)"}</button><button className="primary" onClick={()=>{globalThis.MissMinutesNative?.pickModel?.()}}>Select another GGUF</button><p className="muted">The base model is deliberately separate from our future Miss Minutes fine-tune. That later model becomes ours; this one is the starting brain.</p></Modal>}
  {panel==="memory"&&<Modal title="CHRONAL MEMORY" close={()=>setPanel(null)}><p className="muted">Explicitly stored facts remain on this device.</p>{kernel.memories.map((m,i)=><div className="memory" key={i}>{m}<button onClick={()=>setKernel(k=>({...k,memories:k.memories.filter((_,j)=>j!==i)}))}>×</button></div>)}<button className="primary" onClick={addMemory}>+ Add memory</button></Modal>}
  {panel==="evolution"&&<Modal title="EVOLUTION LEDGER" close={()=>setPanel(null)}><p className="muted">Changes made by the self-improvement layer.</p>{kernel.evolution.ledger.map(x=><div className="ledger" key={x.id}><b>G{x.generation}</b><span>{new Date(x.at).toLocaleString()}</span><p>{x.summary}</p></div>)}{!kernel.evolution.ledger.length&&<p className="muted">No evolutions yet.</p>}<button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}</div>
 }
 function Modal({title,close,children}){return <div className="overlay" onClick={close}><div className="modal" onClick={e=>e.stopPropagation()}><div className="modalhead"><h2>{title}</h2><button onClick={close}>×</button></div>{children}</div></div>}
-createRoot(document.getElementById("root")).render(<App/>);
+class ErrorBoundary extends React.Component{constructor(p){super(p);this.state={error:""}}static getDerivedStateFromError(e){return{error:String(e?.message||e)}}render(){return this.state.error?<div className="fatal"><h2>THE TIMELINE STUMBLED</h2><p>{this.state.error}</p><button onClick={()=>{localStorage.removeItem(STATE);location.reload()}}>Reset local framework</button></div>:this.props.children}}
+createRoot(document.getElementById("root")).render(<ErrorBoundary><App/></ErrorBoundary>);
