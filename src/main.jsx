@@ -8,8 +8,11 @@ import {IdleAutonomy} from "./self/IdleAutonomy.js";
 
 const STATE="miss-minutes-kernel-v9";
 const uid=()=>globalThis.crypto?.randomUUID?.()||("chronal-"+Date.now()+"-"+Math.random().toString(16).slice(2));
-const IDENTITY={name:"Miss Minutes",role:"your local chronal companion",identityAnchor:"I am Miss Minutes. This is my name and role inside this application.",style:"cheerful retro-cartoon clock mascot; theatrical, warm, mischievous, precise",boundaries:"Fan-made local assistant; not official Marvel/TVA software."};
-const clone=(v)=>JSON.parse(JSON.stringify(v));
+const IDENTITY={name:"Miss Minutes",role:"your local chronal companion",identityAnchor:"I am Miss Minutes. This is my name and role inside this application.",style:"faithful retro TVA clock mascot; theatrical, warm, mischievous, precise, visibly artificial",boundaries:"Fan-made local assistant; not official Marvel/TVA software."};
+const clone=(value)=>{
+ try{if(typeof globalThis.structuredClone==="function")return globalThis.structuredClone(value)}catch{}
+ return JSON.parse(JSON.stringify(value));
+};
 const normalizeSkills=(skills)=>Array.isArray(skills)?skills.map(s=>({...s,entrypoint:s?.entrypoint||("builtin://"+String(s?.id||"capability"))})):[];
 const DEFAULT_KERNEL={
  persona:{...IDENTITY,tone:"cheerful, theatrical, mischievous, warmly Southern-coded, helpful with a tiny ominous edge",rules:["Stay playful and precise.","Treat the timeline as a playful metaphor, not a claim of supernatural authority.","Never pretend to be official Marvel/TVA software.","Do not reproduce dialogue from the show verbatim.","Prefer helpful action over empty banter.","Preserve the character's warm retro-cartoon visual language."]},
@@ -132,7 +135,7 @@ function App(){
     const canvas=document.createElement("canvas");canvas.width=96;canvas.height=72;m.canvas=canvas;
     const ctx=canvas.getContext("2d",{willReadFrequently:true});
     const AC=window.AudioContext||window.webkitAudioContext;
-    if(AC&&typeof AC==="function"){m.audio=new AC();m.source=m.audio.createMediaStreamSource(stream);m.analyser=m.audio.createAnalyser();m.analyser.fftSize=256;m.source.connect(m.analyser)}
+    if(AC){m.audio=new AC();m.source=m.audio.createMediaStreamSource(stream);m.analyser=m.audio.createAnalyser();m.analyser.fftSize=256;m.source.connect(m.analyser)}
     setSenses(s=>({...s,camera:true,microphone:true}));
     const tick=()=>{if(!alive)return;const now=performance.now();if(now-m.lastAt<120){requestAnimationFrame(tick);return}m.lastAt=now;let volume=0,motion=0,light=0;
      if(m.analyser){const data=new Uint8Array(m.analyser.fftSize);m.analyser.getByteTimeDomainData(data);let sum=0;for(const x of data){const n=(x-128)/128;sum+=n*n}volume=Math.min(1,Math.sqrt(sum/data.length)*4)}
@@ -150,36 +153,22 @@ function App(){
   const onError=e=>setRuntimeError(String(e?.error?.message||e?.message||"A runtime error occurred."));
   const onReject=e=>setRuntimeError(String(e?.reason?.message||e?.reason||"An async runtime error occurred."));
   window.addEventListener("miss-model-event",onModel);window.addEventListener("error",onError);window.addEventListener("unhandledrejection",onReject);
-  try{const statusFn=typeof globalThis.MissMinutesNative?.modelStatus==="function"?globalThis.MissMinutesNative.modelStatus:null;const raw=statusFn?.();if(raw){const d=JSON.parse(raw);setKernel(k=>({...k,localModel:{...k.localModel,...d,ready:Boolean(d.ready)}}))}}catch(e){console.warn("model status unavailable",e)}
+  try{const raw=globalThis.MissMinutesNative?.modelStatus?.();if(raw){const d=JSON.parse(raw);setKernel(k=>({...k,localModel:{...k.localModel,...d,ready:Boolean(d.ready)}}))}}catch(e){console.warn("model status unavailable",e)}
   return()=>{window.removeEventListener("miss-model-event",onModel);window.removeEventListener("error",onError);window.removeEventListener("unhandledrejection",onReject)}
  },[]);
  useEffect(()=>end.current?.scrollIntoView({behavior:"smooth"}),[messages]);
- const speak=t=>{
-  const synth=globalThis.speechSynthesis;
-  const Utterance=globalThis.SpeechSynthesisUtterance;
-  if(typeof synth?.cancel!=="function"||typeof synth?.speak!=="function"||typeof Utterance!=="function"){setMode("idle");return}
-  try{
-   synth.cancel();
-   const u=new Utterance(String(t||""));
-   u.rate=1.02;u.pitch=1.08;
-   u.onstart=()=>setMode("speaking");
-   u.onend=()=>setMode("idle");
-   u.onerror=()=>setMode("idle");
-   synth.speak(u);
-  }catch(error){console.warn("speech unavailable",error);setMode("idle")}
- };
+ const speak=t=>{if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.02;u.pitch=1.08;u.onstart=()=>setMode("speaking");u.onend=()=>setMode("idle");window.speechSynthesis.speak(u)};
  function send(v=input){
   v=v.trim();if(!v)return;
   setInput("");setMessages(m=>[...m,{role:"user",text:v}]);setMode("thinking");
   const bridge=globalThis.MissMinutesNative;
   setReaction({emotion:"curious",gesture:"think",pace:"normal"});
-  const hasBridge=(name)=>typeof bridge?.[name]==="function";
-  if(!kernel.localModel.ready&&hasBridge("installBaseModel")&&kernel.localModel.status!=="downloading"){
+  if(!kernel.localModel.ready&&bridge?.installBaseModel&&kernel.localModel.status!=="downloading"){
    setMessages(m=>[...m,{role:"assistant",text:"Hold your horses, sugar! My base brain isn't installed yet. I'm fetching the local starting brain now — about 491 MB. Once it's ready, your messages will run through it right here on the device."}]);
    setReaction({emotion:"excited",gesture:"wave",pace:"bright"});
    try{bridge.installBaseModel();setMode("idle");return}catch(e){console.warn("base model install unavailable",e)}
   }
-  if(kernel.localModel.ready&&hasBridge("startGeneration")&&hasBridge("pollGeneration")){
+  if(kernel.localModel.ready&&bridge?.startGeneration&&bridge?.pollGeneration){
    try{
     const job=bridge.startGeneration(kernel.localModel.path,v);generationRef.current=job;
     const poll=()=>{
@@ -208,10 +197,14 @@ function App(){
  <div className="composer"><button className="mic" onClick={()=>setMode("listening")}>🎙</button><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Speak, sugar..."/><button className="send" onClick={()=>send()}>↗</button></div>
  <div className="tools"><button onClick={()=>setPanel("memory")}>Memory · {kernel.memories.length}</button><button onClick={()=>setPanel("evolution")}>Evolution · G{kernel.evolution.generation}</button><button onClick={()=>setPanel("model")}>Local Brain · {kernel.localModel.ready?"READY":"SETUP"}</button><button onClick={evolve}>Let me improve</button><button className="wind" onClick={rollback}>↶ Wind Up the Clock</button><span className="status"><b/> {mode.toUpperCase()} · {senses.camera?"👁":"—"} {senses.microphone?"🎙":"—"} {senses.shake>.55?"📳":""}</span></div></section></main>
  {panel==="framework"&&<Modal title="TVA FRAMEWORK" close={()=>setPanel(null)}><p className="muted">Local editable behavior, checkpointed before evolution.</p><div className="memory"><b>Generation</b><span>{kernel.evolution.generation}</span></div><div className="memory"><b>Snapshots</b><span>{kernel.evolution.snapshots.length}</span></div><div className="memory"><b>Capabilities</b><span>{registryRef.current.list().length}</span></div><div className="memory"><b>Idle evolution</b><span>{kernel.evolution.idle?.enabled?"ACTIVE":"OFF"}</span></div><div className="memory"><b>Local brain</b><span>{kernel.localModel.ready?"READY":"NOT LOADED"}</span></div><button className="primary" onClick={evolve}>Self-improve</button><button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}
- {panel==="model"&&<Modal title="LOCAL BRAIN" close={()=>setPanel(null)}><p className="muted">Miss Minutes now has a real pre-built base brain path. The default brain is Qwen2.5-0.5B-Instruct Q4_K_M, an Apache-2.0 GGUF. It is downloaded once into app-private storage, then llama.cpp runs it locally on the device.</p><div className="memory"><b>Base brain</b><span>{kernel.localModel.ready?"READY":kernel.localModel.status==="downloading"?`${kernel.localModel.progress||0}%`:"NOT INSTALLED"}</span></div><div className="memory"><b>Model</b><span>{kernel.localModel.name}</span></div><button className="primary" disabled={kernel.localModel.status==="downloading"} onClick={()=>{const f=globalThis.MissMinutesNative?.installBaseModel;if(typeof f==="function")f();else setRuntimeError("Local model installer is unavailable in this WebView build.")}}>{kernel.localModel.status==="downloading"?"Downloading…":"Install Base Brain (~491 MB)"}</button><button className="primary" onClick={()=>{const f=globalThis.MissMinutesNative?.pickModel;if(typeof f==="function")f();else setRuntimeError("GGUF picker is unavailable in this WebView build.")}}>Select another GGUF</button><p className="muted">The base model is deliberately separate from our future Miss Minutes fine-tune. That later model becomes ours; this one is the starting brain.</p></Modal>}
+ {panel==="model"&&<Modal title="LOCAL BRAIN" close={()=>setPanel(null)}><p className="muted">Miss Minutes now has a real pre-built base brain path. The default brain is Qwen2.5-0.5B-Instruct Q4_K_M, an Apache-2.0 GGUF. It is downloaded once into app-private storage, then llama.cpp runs it locally on the device.</p><div className="memory"><b>Base brain</b><span>{kernel.localModel.ready?"READY":kernel.localModel.status==="downloading"?`${kernel.localModel.progress||0}%`:"NOT INSTALLED"}</span></div><div className="memory"><b>Model</b><span>{kernel.localModel.name}</span></div><button className="primary" disabled={kernel.localModel.status==="downloading"} onClick={()=>{globalThis.MissMinutesNative?.installBaseModel?.()}}>{kernel.localModel.status==="downloading"?"Downloading…":"Install Base Brain (~491 MB)"}</button><button className="primary" onClick={()=>{globalThis.MissMinutesNative?.pickModel?.()}}>Select another GGUF</button><p className="muted">The base model is deliberately separate from our future Miss Minutes fine-tune. That later model becomes ours; this one is the starting brain.</p></Modal>}
  {panel==="memory"&&<Modal title="CHRONAL MEMORY" close={()=>setPanel(null)}><p className="muted">Explicitly stored facts remain on this device.</p>{kernel.memories.map((m,i)=><div className="memory" key={i}>{m}<button onClick={()=>setKernel(k=>({...k,memories:k.memories.filter((_,j)=>j!==i)}))}>×</button></div>)}<button className="primary" onClick={addMemory}>+ Add memory</button></Modal>}
  {panel==="evolution"&&<Modal title="EVOLUTION LEDGER" close={()=>setPanel(null)}><p className="muted">Changes made by the self-improvement layer.</p>{kernel.evolution.ledger.map(x=><div className="ledger" key={x.id}><b>G{x.generation}</b><span>{new Date(x.at).toLocaleString()}</span><p>{x.summary}</p></div>)}{!kernel.evolution.ledger.length&&<p className="muted">No evolutions yet.</p>}<button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}</div>
 }
 function Modal({title,close,children}){return <div className="overlay" onClick={close}><div className="modal" onClick={e=>e.stopPropagation()}><div className="modalhead"><h2>{title}</h2><button onClick={close}>×</button></div>{children}</div></div>}
-class ErrorBoundary extends React.Component{constructor(p){super(p);this.state={error:""}}static getDerivedStateFromError(e){return{error:String(e?.message||e)}}render(){return this.state.error?<div className="fatal"><h2>THE TIMELINE STUMBLED</h2><p>{this.state.error}</p><button onClick={()=>{localStorage.removeItem(STATE);location.reload()}}>Reset local framework</button></div>:this.props.children}}
+class ErrorBoundary extends React.Component{
+ constructor(p){super(p);this.state={error:""}}
+ static getDerivedStateFromError(e){return{error:String(e?.stack||e?.message||e)}}
+ render(){return this.state.error?<div className="fatal"><h2>THE TIMELINE STUMBLED</h2><p className="fatal-error">{this.state.error}</p><button onClick={()=>{try{localStorage.removeItem(STATE)}catch{};location.reload()}}>Reset local framework</button></div>:this.props.children}
+}
 createRoot(document.getElementById("root")).render(<ErrorBoundary><App/></ErrorBoundary>);

@@ -2,9 +2,9 @@ import React,{useEffect,useRef}from"react";
 import*as THREE from"three";
 
 const C={
- orange:0xf27a18,
- orangeHi:0xff9630,
- orangeDark:0x9a390b,
+ orange:0xf06b12,
+ orangeHi:0xffa13a,
+ orangeDark:0x6e2608,
  ink:0x2a1107,
  cream:0xfff4d6,
  white:0xfffff4,
@@ -60,7 +60,7 @@ export default function MissMinutes3D({mode="idle",reaction={emotion:"neutral",g
   const faceShape=new THREE.Shape();
   faceShape.absarc(0,0,1.42,0,Math.PI*2,false);
   const face=new THREE.Mesh(new THREE.ExtrudeGeometry(faceShape,{
-    depth:.18,bevelEnabled:true,bevelSegments:3,bevelSize:.045,bevelThickness:.045,curveSegments:64
+    depth:.18,bevelEnabled:true,bevelSegments:3,bevelSize:.065,bevelThickness:.055,curveSegments:64
   }),orange);
   face.position.z=-.09;
   mascot.add(face);
@@ -79,16 +79,16 @@ export default function MissMinutes3D({mode="idle",reaction={emotion:"neutral",g
   }
 
   // Expressive cream eyes with dark pupils and individual lashes.
-  const eyeL=new THREE.Mesh(new THREE.SphereGeometry(.34,32,24),cream);
+  const eyeL=new THREE.Mesh(new THREE.SphereGeometry(.31,40,28),cream);
   const eyeR=eyeL.clone();
-  eyeL.scale.set(.62,1.08,.30);eyeR.scale.copy(eyeL.scale);
-  eyeL.position.set(-.43,.31,.38);eyeR.position.set(.43,.31,.38);
+  eyeL.scale.set(.70,1.22,.24);eyeR.scale.copy(eyeL.scale);
+  eyeL.position.set(-.44,.34,.40);eyeR.position.set(.44,.34,.40);
   mascot.add(eyeL,eyeR);
 
   const pupilL=new THREE.Mesh(new THREE.SphereGeometry(.145,24,18),ink);
   const pupilR=pupilL.clone();
   pupilL.scale.set(.64,1.22,.42);pupilR.scale.copy(pupilL.scale);
-  pupilL.position.set(-.43,.27,.62);pupilR.position.set(.43,.27,.62);
+  pupilL.position.set(-.44,.29,.64);pupilR.position.set(.44,.29,.64);
   mascot.add(pupilL,pupilR);
 
   const lashes=new THREE.Group();mascot.add(lashes);
@@ -101,13 +101,13 @@ export default function MissMinutes3D({mode="idle",reaction={emotion:"neutral",g
     }
   }
 
-  const nose=new THREE.Mesh(new THREE.SphereGeometry(.055,20,14),ink);
-  nose.position.set(0,-.015,.66);mascot.add(nose);
+  const nose=new THREE.Mesh(new THREE.SphereGeometry(.065,24,18),ink);
+  nose.position.set(0,-.03,.68);mascot.add(nose);
 
   const mouthCurve=new THREE.QuadraticBezierCurve3(
-    new THREE.Vector3(-.235,-.35,.64),
-    new THREE.Vector3(0,-.47,.68),
-    new THREE.Vector3(.235,-.35,.64)
+    new THREE.Vector3(-.25,-.36,.66),
+    new THREE.Vector3(0,-.50,.70),
+    new THREE.Vector3(.25,-.36,.66)
   );
   const mouth=new THREE.Mesh(new THREE.TubeGeometry(mouthCurve,20,.026,10,false),ink);
   mascot.add(mouth);
@@ -139,8 +139,8 @@ export default function MissMinutes3D({mode="idle",reaction={emotion:"neutral",g
   const makeLeg=side=>{
     const g=new THREE.Group();g.position.set(side*.30,-1.31,.0);
     const leg=capsule(.052,.54,ink);g.add(leg);
-    const boot=new THREE.Mesh(new THREE.SphereGeometry(.24,24,16),bootMat);
-    boot.scale.set(1.08,.48,1.32);boot.position.set(side*.045,-.37,.08);g.add(boot);
+    const boot=new THREE.Mesh(new THREE.SphereGeometry(.22,28,20),bootMat);
+    boot.scale.set(1.22,.50,1.42);boot.position.set(side*.045,-.37,.08);g.add(boot);
     const sole=new THREE.Mesh(new THREE.BoxGeometry(.34,.045,.38),ink);
     sole.position.set(side*.045,-.49,.08);g.add(sole);
     return g;
@@ -218,8 +218,8 @@ export default function MissMinutes3D({mode="idle",reaction={emotion:"neutral",g
     lashes.scale.y=eyeY;
 
     const px=s.targetX*.12,py=s.targetY*.10;
-    pupilL.position.x=-.43+px;pupilR.position.x=.43+px;
-    pupilL.position.y=.27+py;pupilR.position.y=.27+py;
+    pupilL.position.x=-.44+px;pupilR.position.x=.44+px;
+    pupilL.position.y=.29+py;pupilR.position.y=.29+py;
 
     const talking=s.mode==="speaking";
     mouth.scale.y=talking?(1+Math.abs(Math.sin(t*.026))*.32):1;
@@ -229,7 +229,7 @@ export default function MissMinutes3D({mode="idle",reaction={emotion:"neutral",g
     armL.rotation.z=wave?Math.sin(t*.009)*.34:gesture==="think"?.22:Math.sin(t*.0022)*.018;
     armR.rotation.z=wave?Math.sin(t*.010+.8)*.34:gesture==="point"?-.18:gesture==="think"?-.08:(talking?Math.sin(t*.008)*.12:.018);
 
-    const glow=emotion==="excited"?.20:emotion==="concerned"?.075:emotion==="amused"?.15:.11;
+    const glow=emotion==="excited"?.24:emotion==="concerned"?.09:emotion==="amused"?.17:.12;
     halo.material.opacity=glow;
     halo.rotation.z=t*.00032;
     ring2.rotation.z=-t*.00020;
