@@ -17,6 +17,7 @@ import androidx.webkit.WebViewClientCompat
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import java.time.Instant
 import org.json.JSONObject
 
@@ -104,8 +105,10 @@ private class AppAssetClient(private val loader: WebViewAssetLoader) : WebViewCl
 
 class FrameworkBridge(private val root: File, private val activity: MainActivity) {
     companion object {
-        private const val BASE_MODEL_URL = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf?download=true"
+        private const val BASE_MODEL_URL = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/df5bf01389a39c743ab467d734bf501681e041c5/qwen2.5-0.5b-instruct-q4_k_m.gguf?download=true"
         private const val BASE_MODEL_NAME = "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+        private const val BASE_MODEL_SHA256 = "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db"
+        private const val BASE_MODEL_MIN_BYTES = 450L * 1024L * 1024L
     }
     @Volatile private var downloading = false
     init {
@@ -127,7 +130,7 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
         val active = if (activeName.isNotBlank()) File(root, "models/" + activeName) else null
         val base = File(root, "models/" + BASE_MODEL_NAME)
         val file = active?.takeIf { it.exists() } ?: base.takeIf { it.exists() }
-        val ready = file != null && file.length() > 300L * 1024L * 1024L
+        val ready = file != null && file.length() > 1024L * 1024L
         return JSONObject().apply {
             put("name", if (ready) file!!.name else "No base brain installed")
             put("path", if (ready) file!!.absolutePath else "")
@@ -142,7 +145,7 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
     fun installBaseModel(): Boolean {
         if (downloading) return false
         val target = File(root, "models/" + BASE_MODEL_NAME)
-        if (target.exists() && target.length() > 300L * 1024L * 1024L) {
+        if (target.exists() && target.length() > BASE_MODEL_MIN_BYTES) {
             File(root, "active-model.txt").writeText(BASE_MODEL_NAME)
             emitModel("ready", 100, target)
             return true
@@ -181,7 +184,18 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
                     }
                 }
                 connection.disconnect()
-                if (part.length() < 300L * 1024L * 1024L) error("Downloaded model is unexpectedly small.")
+                if (part.length() < BASE_MODEL_MIN_BYTES) error("Downloaded model is unexpectedly small.")
+                val digest=MessageDigest.getInstance("SHA-256")
+                part.inputStream().use { input ->
+                    val buf=ByteArray(1024*1024)
+                    while(true){
+                        val n=input.read(buf)
+                        if(n<=0) break
+                        digest.update(buf,0,n)
+                    }
+                }
+                val actualHash=digest.digest().joinToString("") { "%02x".format(it) }
+                if(actualHash!=BASE_MODEL_SHA256) error("Base brain checksum mismatch.")
                 if (target.exists()) target.delete()
                 if (!part.renameTo(target)) {
                     part.copyTo(target, overwrite = true)
