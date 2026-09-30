@@ -15,7 +15,10 @@ import android.webkit.WebView
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.Instant
+import org.json.JSONObject
 
 class MainActivity : Activity() {
     companion object {
@@ -96,6 +99,11 @@ private class AppAssetClient(private val loader: WebViewAssetLoader) : WebViewCl
 }
 
 class FrameworkBridge(private val root: File, private val activity: MainActivity) {
+    companion object {
+        private const val BASE_MODEL_URL = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf?download=true"
+        private const val BASE_MODEL_NAME = "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+    }
+    @Volatile private var downloading = false
     init {
         root.mkdirs()
         File(root, "models").mkdirs()
@@ -103,6 +111,93 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
 
     @JavascriptInterface
     fun frameworkPath(): String = root.absolutePath
+
+    @JavascriptInterface
+    fun modelStatus(): String {
+        val file = File(root, "models/" + BASE_MODEL_NAME)
+        val ready = file.exists() && file.length() > 300L * 1024L * 1024L
+        return JSONObject().apply {
+            put("name", if (ready) BASE_MODEL_NAME else "No base brain installed")
+            put("path", if (ready) file.absolutePath else "")
+            put("ready", ready)
+            put("status", if (downloading) "downloading" else if (ready) "ready" else "none")
+            put("progress", if (ready) 100 else 0)
+            put("source", "Qwen2.5-0.5B-Instruct Q4_K_M")
+        }.toString()
+    }
+
+    @JavascriptInterface
+    fun installBaseModel(): Boolean {
+        if (downloading) return false
+        val target = File(root, "models/" + BASE_MODEL_NAME)
+        if (target.exists() && target.length() > 300L * 1024L * 1024L) {
+            emitModel("ready", 100, target)
+            return true
+        }
+        downloading = true
+        emitModel("downloading", 0, null)
+        Thread {
+            val part = File(root, "models/" + BASE_MODEL_NAME + ".part")
+            try {
+                if (part.exists()) part.delete()
+                val connection = (URL(BASE_MODEL_URL).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 20000
+                    readTimeout = 30000
+                    instanceFollowRedirects = true
+                    requestMethod = "GET"
+                }
+                connection.connect()
+                if (connection.responseCode !in 200..299) error("Model download HTTP " + connection.responseCode)
+                val total = connection.contentLengthLong
+                connection.inputStream.use { input ->
+                    part.outputStream().use { output ->
+                        val buf = ByteArray(1024 * 1024)
+                        var readTotal = 0L
+                        var lastPercent = -1
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n <= 0) break
+                            output.write(buf, 0, n)
+                            readTotal += n
+                            val pct = if (total > 0) ((readTotal * 100L) / total).toInt().coerceIn(0, 100) else -1
+                            if (pct >= 0 && pct != lastPercent) {
+                                lastPercent = pct
+                                emitModel("downloading", pct, null)
+                            }
+                        }
+                    }
+                }
+                connection.disconnect()
+                if (part.length() < 300L * 1024L * 1024L) error("Downloaded model is unexpectedly small.")
+                if (target.exists()) target.delete()
+                if (!part.renameTo(target)) {
+                    part.copyTo(target, overwrite = true)
+                    part.delete()
+                }
+                downloading = false
+                emitModel("ready", 100, target)
+            } catch (t: Throwable) {
+                downloading = false
+                if (part.exists()) part.delete()
+                emitModel("error", 0, null, t.message ?: "Base brain download failed.")
+            }
+        }.start()
+        return true
+    }
+
+    private fun emitModel(status: String, progress: Int, file: File?, error: String = "") {
+        val detail = JSONObject().apply {
+            put("name", file?.name ?: "No base brain installed")
+            put("path", file?.absolutePath ?: "")
+            put("ready", status == "ready")
+            put("status", status)
+            put("progress", progress)
+            put("error", error)
+            put("source", "Qwen2.5-0.5B-Instruct Q4_K_M")
+        }.toString()
+        val script = "window.dispatchEvent(new CustomEvent(\"miss-model-event\",{detail:" + detail + "}))"
+        activity.runOnUiThread { activity.web.evaluateJavascript(script, null) }
+    }
 
     @JavascriptInterface
     fun nativeRuntimeStatus(): String =
