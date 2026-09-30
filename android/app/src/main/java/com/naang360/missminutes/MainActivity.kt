@@ -123,15 +123,18 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
 
     @JavascriptInterface
     fun modelStatus(): String {
-        val file = File(root, "models/" + BASE_MODEL_NAME)
-        val ready = file.exists() && file.length() > 300L * 1024L * 1024L
+        val activeName = File(root, "active-model.txt").takeIf { it.exists() }?.readText()?.trim().orEmpty()
+        val active = if (activeName.isNotBlank()) File(root, "models/" + activeName) else null
+        val base = File(root, "models/" + BASE_MODEL_NAME)
+        val file = active?.takeIf { it.exists() } ?: base.takeIf { it.exists() }
+        val ready = file != null && file.length() > 300L * 1024L * 1024L
         return JSONObject().apply {
-            put("name", if (ready) BASE_MODEL_NAME else "No base brain installed")
-            put("path", if (ready) file.absolutePath else "")
+            put("name", if (ready) file!!.name else "No base brain installed")
+            put("path", if (ready) file!!.absolutePath else "")
             put("ready", ready)
             put("status", if (downloading) "downloading" else if (ready) "ready" else "none")
             put("progress", if (ready) 100 else 0)
-            put("source", "Qwen2.5-0.5B-Instruct Q4_K_M")
+            put("source", if (ready && file!!.name == BASE_MODEL_NAME) "Qwen2.5-0.5B-Instruct Q4_K_M" else "Imported GGUF")
         }.toString()
     }
 
@@ -140,6 +143,7 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
         if (downloading) return false
         val target = File(root, "models/" + BASE_MODEL_NAME)
         if (target.exists() && target.length() > 300L * 1024L * 1024L) {
+            File(root, "active-model.txt").writeText(BASE_MODEL_NAME)
             emitModel("ready", 100, target)
             return true
         }
@@ -184,6 +188,7 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
                     part.delete()
                 }
                 downloading = false
+                File(root, "active-model.txt").writeText(BASE_MODEL_NAME)
                 emitModel("ready", 100, target)
             } catch (t: Throwable) {
                 downloading = false
@@ -258,6 +263,7 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
             activity.contentResolver.openInputStream(uri)?.use { input ->
                 out.outputStream().use { output -> input.copyTo(output, 1024 * 1024) }
             }
+            File(root, "active-model.txt").writeText(out.name)
             out
         } catch (_: Exception) {
             null
