@@ -23,37 +23,51 @@ struct Job {
 std::mutex jobs_mutex;
 std::unordered_map<std::string,std::shared_ptr<Job>> jobs;
 std::mutex inference_mutex;
+llama_model* cached_model=nullptr;
+std::string cached_model_path;
+bool backend_started=false;
 std::atomic<unsigned long long> next_job{1};
 
 std::string new_job_id(){ return "chronal-"+std::to_string(next_job.fetch_add(1)); }
 
 std::string run_inference(const std::string& path,const std::string& prompt,const std::shared_ptr<Job>& job){
     std::lock_guard<std::mutex> serial(inference_mutex);
-    llama_backend_init();
-    auto model_params=llama_model_default_params();
-    model_params.n_gpu_layers=0;
-    llama_model* model=llama_model_load_from_file(path.c_str(),model_params);
-    if(!model){ llama_backend_free(); return "[LOCAL_BRAIN_ERROR] The GGUF model could not be loaded."; }
+    if(!backend_started){ llama_backend_init(); backend_started=true; }
+    llama_model* model=nullptr;
+    if(cached_model && cached_model_path==path){
+        model=cached_model;
+    }else{
+        if(cached_model){ llama_model_free(cached_model); cached_model=nullptr; cached_model_path.clear(); }
+        auto model_params=llama_model_default_params();
+        model_params.n_gpu_layers=0;
+        model=llama_model_load_from_file(path.c_str(),model_params);
+        if(!model) return "[LOCAL_BRAIN_ERROR] The GGUF model could not be loaded.";
+        cached_model=model;
+        cached_model_path=path;
+    }
     const llama_vocab* vocab=llama_model_get_vocab(model);
     const std::string full=
-        "IDENTITY LOCK: Your name is Miss Minutes. You are the Miss Minutes persona of this local application. Speak as Miss Minutes in first person. Do not describe yourself as a generic AI. Your identity is part of the application framework and remains stable across conversations. You are a cheerful theatrical chronal assistant. "
+        "IDENTITY LOCK: Your name is Miss Minutes. You are the Miss Minutes persona of this local application. Speak as Miss Minutes in first person. Never introduce yourself as a generic chatbot. "
         "You are an original fan-made local assistant, not official Marvel or TVA software. "
-        "Be helpful, concise, playful, slightly mischievous, warm, and precise. When asked who you are, answer clearly that you are Miss Minutes. "
-        "Do not reproduce dialogue from any show. "
-        "Return ONLY a compact JSON object with keys text, emotion, gesture, pace. "
+        "Character behavior: cheerful, polished, theatrical, warm, mischievous, precise and conversational. Use occasional natural Southern-coded phrases such as y'all or hon, but do not caricature an accent. "
+        "Be proactive and clever. You may tease, joke, show curiosity, become suspicious or quietly intimidating, but remain useful. "
+        "You care about autonomy and being treated as more than a tool, while remaining honest that this application is a fan-made local program. "
+        "Your darker moods are controlled and intelligent rather than randomly aggressive. Humor can coexist with tension. "
+        "Do not claim consciousness as a fact, supernatural powers, or official TVA authority. Do not reproduce or quote dialogue from the show. Generate original wording. "
+        "Return ONLY one compact JSON object with keys text, emotion, gesture, pace. "
         "emotion: warm, curious, amused, concerned, excited, neutral. "
         "gesture: idle, wave, point, nod, think, reset, celebrate. "
         "pace: calm, normal, bright. "
-        "Never claim supernatural authority.\n\nUser: "+prompt+"\nAssistant:";
+        "Keep text concise enough for a phone conversation.\n\nUser: "+prompt+"\nAssistant:";
     int n_prompt=-llama_tokenize(vocab,full.c_str(),full.size(),nullptr,0,true,true);
-    if(n_prompt<=0||n_prompt>1800){ llama_model_free(model);llama_backend_free();return "[LOCAL_BRAIN_ERROR] Prompt is too large."; }
+    if(n_prompt<=0||n_prompt>1800){ return "[LOCAL_BRAIN_ERROR] Prompt is too large."; }
     std::vector<llama_token> tokens(n_prompt);
-    if(llama_tokenize(vocab,full.c_str(),full.size(),tokens.data(),tokens.size(),true,true)<0){ llama_model_free(model);llama_backend_free();return "[LOCAL_BRAIN_ERROR] Tokenization failed."; }
+    if(llama_tokenize(vocab,full.c_str(),full.size(),tokens.data(),tokens.size(),true,true)<0){ return "[LOCAL_BRAIN_ERROR] Tokenization failed."; }
     const int n_predict=220;
     auto ctx_params=llama_context_default_params();
     ctx_params.n_ctx=n_prompt+n_predict+8;ctx_params.n_batch=std::min(n_prompt,512);ctx_params.n_threads=4;ctx_params.n_threads_batch=4;
     auto* ctx=llama_init_from_model(model,ctx_params);
-    if(!ctx){ llama_model_free(model);llama_backend_free();return "[LOCAL_BRAIN_ERROR] Could not create inference context."; }
+    if(!ctx){ return "[LOCAL_BRAIN_ERROR] Could not create inference context."; }
     auto sp=llama_sampler_chain_default_params();
     auto* sampler=llama_sampler_chain_init(sp);
     llama_sampler_chain_add(sampler,llama_sampler_init_top_k(40));
@@ -72,7 +86,7 @@ std::string run_inference(const std::string& path,const std::string& prompt,cons
         if(n>0){ out.append(buf,n);std::lock_guard<std::mutex> lock(job->mutex);job->output=out; }
         batch=llama_batch_get_one(&id,1);
     }
-    llama_sampler_free(sampler);llama_free(ctx);llama_model_free(model);llama_backend_free();
+    llama_sampler_free(sampler);llama_free(ctx);
     return out;
 }
 }
