@@ -34,3 +34,4 @@ This is a fan-made project and is not an official Marvel, Loki, or Disney produc
 
 
 Build marker: current debug APK requested on 2026-09-30.
+\n\n## Visual and AI direction\nSee `DESIGN_REFERENCE.md` for the permanent visual-reference and local-inference invariants. Version 0.3.0 moves the character from a flat clock widget toward an animated full-body clock character and adds the local-brain model surface.\n
