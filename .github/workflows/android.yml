@@ -26,6 +26,8 @@ jobs:
         run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "8.13" }
+      - name: Fetch local inference engine
+        run: git clone --depth 1 https://github.com/ggml-org/llama.cpp.git android/app/src/main/cpp/llama.cpp
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon
       - uses: actions/upload-artifact@v6
