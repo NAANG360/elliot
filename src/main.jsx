@@ -1,10 +1,73 @@
-import React,{useEffect,useMemo,useRef,useState} from "react";import{createRoot}from"react-dom/client";import"./style.css";
-const KEY="miss-minutes-state-v1";
-const demo=(q)=>{const s=q.toLowerCase();if(s.includes("time"))return"Why, sugar, it is time for a little temporal housekeeping! Your local clock says "+new Date().toLocaleTimeString()+". Better not let the timeline catch you slippin'.";if(s.includes("hello")||s.includes("hi"))return"Well hello there, sugar! Miss Minutes at your service. What can I help you straighten out today?";if(s.includes("who are you"))return"I'm Miss Minutes — your cheerful little chronal companion, here to keep things tidy across the timeline. Mostly tidy.";return"Now that is an interesting little timeline problem. I'm in demo mode at the moment, but I can still keep you company. Add an AI backend when you're ready and we'll give me considerably more to do."};
-function App(){const saved=useMemo(()=>{try{return JSON.parse(localStorage.getItem(KEY))||{messages:[],memory:[],settings:{speech:true,speed:1}}}catch{return{messages:[],memory:[],settings:{speech:true,speed:1}}}},[]);const[messages,setMessages]=useState(saved.messages);const[memory,setMemory]=useState(saved.memory);const[settings,setSettings]=useState(saved.settings);const[input,setInput]=useState("");const[busy,setBusy]=useState(false);const[state,setState]=useState("idle");const[showSettings,setShowSettings]=useState(false);const[showMemory,setShowMemory]=useState(false);const end=useRef(null);useEffect(()=>localStorage.setItem(KEY,JSON.stringify({messages,memory,settings})),[messages,memory,settings]);useEffect(()=>end.current?.scrollIntoView({behavior:"smooth"}),[messages,busy]);
-const speak=(text)=>{if(!settings.speech||!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=Number(settings.speed)||1;u.pitch=1.05;u.onstart=()=>setState("speaking");u.onend=()=>setState("idle");window.speechSynthesis.speak(u)};
-async function send(text=input){text=text.trim();if(!text||busy)return;setInput("");setMessages(x=>[...x,{role:"user",text}]);setBusy(true);setState("thinking");let reply;try{const r=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({messages:[...messages,{role:"user",text}],memory})});if(r.ok){const d=await r.json();reply=d.reply}}catch{}reply||=(demo(text));setTimeout(()=>{setMessages(x=>[...x,{role:"assistant",text:reply}]);setBusy(false);speak(reply)},350)}
-function listen(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return alert("Speech recognition is not available in this browser. You can still type to me.");const r=new SR();r.lang="en-US";r.interimResults=false;r.onstart=()=>setState("listening");r.onend=()=>setState("idle");r.onresult=e=>send(e.results[0][0].transcript);r.start()}
-function addMemory(){const v=prompt("What should Miss Minutes remember?");if(v?.trim())setMemory(x=>[...x,v.trim()])}
-return <div className="app"><div className="grain"/><header><div><span className="eyebrow">TIME VARIANCE AUTHORITY</span><h1>MISS MINUTES</h1></div><button className="icon" onClick={()=>setShowSettings(true)}>⚙</button></header><main><section className={"character "+state}><div className="clock"><div className="ticks"/><div className="hand h1"/><div className="hand h2"/><div className="face"><i/><i/></div><div className="mouth"/></div><div className="bubble">{state==="thinking"?"Hmm... let me check the timeline.":state==="listening"?"I'm listening, sugar.":state==="speaking"?"There we go!":messages.length?"Awaiting your next temporal anomaly.":"Welcome to the TVA, sugar!"}</div></section><section className="chat"><div className="messages">{messages.map((m,i)=><div key={i} className={"msg "+m.role}><span>{m.role==="assistant"?"MISS MINUTES":"YOU"}</span><p>{m.text}</p></div>)}{busy&&<div className="msg assistant"><span>MISS MINUTES</span><p className="dots">● ● ●</p></div>}<div ref={end}/></div><div className="composer"><button className="mic" onClick={listen}>🎙</button><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Speak, sugar..." disabled={busy}/><button className="send" onClick={()=>send()}>↗</button></div><div className="tools"><button onClick={()=>setShowMemory(true)}>Memory · {memory.length}</button><button onClick={()=>{setMessages([]);window.speechSynthesis?.cancel()}}>Clear timeline</button><span className="status"><b/> {state.toUpperCase()}</span></div></section></main>{showSettings&&<Modal title="TVA SETTINGS" close={()=>setShowSettings(false)}><label>Voice <input type="checkbox" checked={settings.speech} onChange={e=>setSettings({...settings,speech:e.target.checked})}/></label><label>Speech speed <input type="range" min=".6" max="1.5" step=".1" value={settings.speed} onChange={e=>setSettings({...settings,speed:e.target.value})}/></label><button className="danger" onClick={()=>{localStorage.removeItem(KEY);location.reload()}}>Erase local records</button></Modal>}{showMemory&&<Modal title="CHRONAL MEMORY" close={()=>setShowMemory(false)}><p className="muted">Only facts you explicitly add are stored locally.</p>{memory.map((m,i)=><div className="memory" key={i}>{m}<button onClick={()=>setMemory(x=>x.filter((_,j)=>j!==i))}>×</button></div>)}<button className="primary" onClick={addMemory}>+ Add memory</button></Modal>}</div>}
-function Modal({title,close,children}){return <div className="overlay" onClick={close}><div className="modal" onClick={e=>e.stopPropagation()}><div className="modalhead"><h2>{title}</h2><button onClick={close}>×</button></div>{children}</div></div>};createRoot(document.getElementById("root")).render(<App/>);
+import React,{useEffect,useRef,useState}from"react";
+import{createRoot}from"react-dom/client";
+import"./style.css";
+
+const STATE="miss-minutes-kernel-v2";
+const DEFAULT_KERNEL={
+ persona:{name:"Miss Minutes",tone:"cheerful, theatrical, mischievous, warmly Southern-coded, helpful with a tiny ominous edge",rules:["Stay playful and precise.","Treat the timeline as a playful metaphor, not a claim of supernatural authority.","Never pretend to be official Marvel/TVA software.","Do not reproduce dialogue from the show verbatim.","Prefer helpful action over empty banter."]},
+ memories:[],
+ skills:[{id:"clock-check",name:"Clock Check",description:"Report the current local time."},{id:"timeline-note",name:"Timeline Note",description:"Turn a user-provided note into a remembered local fact."}],
+ evolution:{generation:0,ledger:[],snapshots:[],lastGood:null}
+};
+
+function load(){try{return JSON.parse(localStorage.getItem(STATE))||structuredClone(DEFAULT_KERNEL)}catch{return structuredClone(DEFAULT_KERNEL)}}
+function save(k){localStorage.setItem(STATE,JSON.stringify(k))}
+function clone(v){return JSON.parse(JSON.stringify(v))}
+function checkpoint(k,reason="before evolution"){const snap={id:crypto.randomUUID(),at:new Date().toISOString(),reason,kernel:clone(k)};k.evolution.snapshots=[snap,...k.evolution.snapshots].slice(0,12);k.evolution.lastGood=snap.id;return k}
+function windUp(k){const id=k.evolution.lastGood;const snap=k.evolution.snapshots.find(s=>s.id===id)||k.evolution.snapshots[0];return snap?clone(snap.kernel):k}
+
+function demoBrain(text,kernel){
+ const q=text.toLowerCase();
+ if(q.includes("wind up")||q.includes("rollback"))return "Oh! A little framework hiccup, sugar? Wind Up the Clock is right there in the TVA controls. I keep a known-good checkpoint before I change myself.";
+ if(q.includes("who are you"))return "I'm Miss Minutes — your little chronal companion. I live in this framework now, and yes, I'm allowed to grow.";
+ if(q.includes("time"))return "Well, the current local time is "+new Date().toLocaleTimeString()+". Time is such a fussy little thing.";
+ if(q.includes("hello")||q==="hi")return "Well hello there, sugar! I was wondering when you'd come back.";
+ if(q.includes("what changed"))return kernel.evolution.ledger.slice(0,3).map(x=>x.summary).join(" • ")||"Not a thing yet. My little framework is waiting for its first evolution.";
+ if(q.includes("remember"))return "I can keep an explicitly supplied note in my local chronal memory. Tell me exactly what you'd like preserved.";
+ return "Now that's a rather interesting temporal problem. My local brain is running without a server. Give me a concrete task and I'll work with the framework I've got.";
+}
+
+function App(){
+ const[kernel,setKernel]=useState(load);
+ const[messages,setMessages]=useState([]);
+ const[input,setInput]=useState("");
+ const[mode,setMode]=useState("idle");
+ const[panel,setPanel]=useState(null);
+ const end=useRef(null);
+ useEffect(()=>save(kernel),[kernel]);
+ useEffect(()=>end.current?.scrollIntoView({behavior:"smooth"}),[messages]);
+ const speak=t=>{if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.02;u.pitch=1.08;u.onstart=()=>setMode("speaking");u.onend=()=>setMode("idle");window.speechSynthesis.speak(u)};
+ function send(v=input){v=v.trim();if(!v)return;setInput("");setMessages(m=>[...m,{role:"user",text:v}]);setMode("thinking");setTimeout(()=>{const r=demoBrain(v,kernel);setMessages(m=>[...m,{role:"assistant",text:r}]);setMode("idle");speak(r)},260)}
+ function evolve(){
+   setKernel(old=>{
+    let k=checkpoint(clone(old),"before self-improvement");
+    const n=k.evolution.generation+1;
+    const change={id:crypto.randomUUID(),at:new Date().toISOString(),generation:n,summary:"Expanded local evolution capacity and refreshed persona guidance.",details:"Self-improvement changed the editable behavior layer only.",reversible:true};
+    k.persona.rules=[...new Set([...k.persona.rules,"When improving, preserve the user's intent and existing working abilities."])];
+    k.evolution.generation=n;k.evolution.ledger=[change,...k.evolution.ledger].slice(0,50);
+    return k;
+   });
+   setMessages(m=>[...m,{role:"assistant",text:"There we go! I've made a small framework improvement and tucked the previous timeline safely into a checkpoint. If I get clever in the wrong direction, wind me back."}]);
+ }
+ function rollback(){
+   setKernel(old=>windUp(old));
+   setMessages(m=>[...m,{role:"assistant",text:"Winding the clock... and we're back to the last known-good framework. Neat, huh?"}]);
+   setMode("idle");
+ }
+ function addMemory(){
+   const v=prompt("What should I remember locally?");
+   if(v?.trim())setKernel(k=>({...k,memories:[...k.memories,v.trim()]}));
+ }
+ const stateText=mode==="thinking"?"Hmm... let me check the timeline.":mode==="speaking"?"There we go!":mode==="listening"?"I'm listening, sugar.":messages.length?"Awaiting your next temporal anomaly.":"Welcome to the TVA, sugar!";
+ return <div className="app"><div className="grain"/>
+ <header><div><span className="eyebrow">TIME VARIANCE AUTHORITY</span><h1>MISS MINUTES</h1></div><button className="icon" onClick={()=>setPanel("framework")}>⚙</button></header>
+ <main><section className={"character "+mode}><div className="clock"><div className="ticks"/><div className="hand h1"/><div className="hand h2"/><div className="face"><i/><i/></div><div className="mouth"/></div><div className="bubble">{stateText}</div></section>
+ <section className="chat"><div className="messages">{messages.map((m,i)=><div key={i} className={"msg "+m.role}><span>{m.role==="assistant"?"MISS MINUTES":"YOU"}</span><p>{m.text}</p></div>)}<div ref={end}/></div>
+ <div className="composer"><button className="mic" onClick={()=>setMode("listening")}>🎙</button><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Speak, sugar..."/><button className="send" onClick={()=>send()}>↗</button></div>
+ <div className="tools"><button onClick={()=>setPanel("memory")}>Memory · {kernel.memories.length}</button><button onClick={()=>setPanel("evolution")}>Evolution · G{kernel.evolution.generation}</button><button onClick={evolve}>Let me improve</button><button className="wind" onClick={rollback}>↶ Wind Up the Clock</button><span className="status"><b/> {mode.toUpperCase()}</span></div></section></main>
+ {panel==="framework"&&<Modal title="TVA FRAMEWORK" close={()=>setPanel(null)}><p className="muted">Her editable behavior layer is local. Every self-change checkpoints first.</p><div className="memory"><b>Generation</b><span>{kernel.evolution.generation}</span></div><div className="memory"><b>Snapshots</b><span>{kernel.evolution.snapshots.length}</span></div><div className="memory"><b>Skills</b><span>{kernel.skills.length}</span></div><button className="primary" onClick={evolve}>Self-improve</button><button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}
+ {panel==="memory"&&<Modal title="CHRONAL MEMORY" close={()=>setPanel(null)}><p className="muted">Explicitly stored facts remain on this device.</p>{kernel.memories.map((m,i)=><div className="memory" key={i}>{m}<button onClick={()=>setKernel(k=>({...k,memories:k.memories.filter((_,j)=>j!==i)}))}>×</button></div>)}<button className="primary" onClick={addMemory}>+ Add memory</button></Modal>}
+ {panel==="evolution"&&<Modal title="EVOLUTION LEDGER" close={()=>setPanel(null)}><p className="muted">Changes made by the self-improvement layer.</p>{kernel.evolution.ledger.map(x=><div className="ledger" key={x.id}><b>G{x.generation}</b><span>{new Date(x.at).toLocaleString()}</span><p>{x.summary}</p></div>)}{!kernel.evolution.ledger.length&&<p className="muted">No evolutions yet.</p>}<button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}</div>
+}
+function Modal({title,close,children}){return <div className="overlay" onClick={close}><div className="modal" onClick={e=>e.stopPropagation()}><div className="modalhead"><h2>{title}</h2><button onClick={close}>×</button></div>{children}</div></div>}
+createRoot(document.getElementById("root")).render(<App/>);
