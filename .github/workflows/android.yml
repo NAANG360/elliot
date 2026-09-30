@@ -16,6 +16,7 @@ jobs:
       - name: Build web surface
         run: |
           npm install
+          npm --version
           npm run build
           rm -rf android/app/src/main/assets/web
           mkdir -p android/app/src/main/assets/web
