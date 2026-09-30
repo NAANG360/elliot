@@ -10,7 +10,7 @@ const hashText=(text="")=>{
 export function validateManifest(m){
   const errors=[];
   if(!m||typeof m!=="object")return{ok:false,errors:["manifest must be an object"]};
-  for(const key of ["id","name","version","description","entrypoint"])if(typeof m[key]!=="string"||!m[key].trim())errors.push(key+" is required");
+  for(const key of ["id","name","version","description"])if(typeof m[key]!=="string"||!m[key].trim())errors.push(key+" is required");
   for(const key of ["permissions","dependencies","tests"])if(m[key]!==undefined&&!Array.isArray(m[key]))errors.push(key+" must be an array");
   if(m.status&&!CAPABILITY_STATES.includes(m.status))errors.push("invalid status");
   return{ok:!errors.length,errors};
@@ -23,7 +23,7 @@ export class CapabilityRegistry{
  install(manifest){
   const check=validateManifest(manifest);if(!check.ok)throw new Error("Invalid capability: "+check.errors.join(", "));
   const now=new Date().toISOString();
-  const item={permissions:[],dependencies:[],tests:[],status:"installed",sourceHash:hashText(manifest.source||manifest.entrypoint),createdAt:now,updatedAt:now,...clean(manifest)};
+  const item={permissions:[],dependencies:[],tests:[],status:"installed",sourceHash:hashText(manifest.source||manifest.entrypoint||manifest.id),createdAt:now,updatedAt:now,entrypoint:"capability://"+manifest.id,...clean(manifest)};
   const old=this.items.get(item.id);if(old)item.createdAt=old.createdAt;
   this.items.set(item.id,item);return clean(item);
  }

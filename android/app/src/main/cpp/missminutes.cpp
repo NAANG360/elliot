@@ -76,9 +76,10 @@ std::string run_inference(const std::string& path,const std::string& prompt,cons
     llama_sampler_chain_add(sampler,llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
     llama_batch batch=llama_batch_get_one(tokens.data(),tokens.size());
     std::string out;
+    bool decode_failed=false;
     for(int pos=0;pos+batch.n_tokens<n_prompt+n_predict;){
         if(job->cancel.load()) break;
-        if(llama_decode(ctx,batch)!=0) break;
+        if(llama_decode(ctx,batch)!=0){ decode_failed=true; break; }
         pos+=batch.n_tokens;
         llama_token id=llama_sampler_sample(sampler,ctx,-1);
         if(llama_vocab_is_eog(vocab,id)) break;
@@ -87,6 +88,7 @@ std::string run_inference(const std::string& path,const std::string& prompt,cons
         batch=llama_batch_get_one(&id,1);
     }
     llama_sampler_free(sampler);llama_free(ctx);
+    if(decode_failed && !job->cancel.load()) return "[LOCAL_BRAIN_ERROR] Native token decode failed.";
     return out;
 }
 }
@@ -123,11 +125,27 @@ Java_com_naang360_missminutes_NativeBrain_pollGenerationNative(JNIEnv* env,jclas
     const char* id=env->GetStringUTFChars(jid,nullptr);std::shared_ptr<Job> job;
     {std::lock_guard<std::mutex> lock(jobs_mutex);auto it=jobs.find(id?std::string(id):"");if(it!=jobs.end())job=it->second;}
     if(id)env->ReleaseStringUTFChars(jid,id);
+    const std::string key=id?std::string(id):"";
     if(!job)return env->NewStringUTF("ERROR\nUnknown generation job.");
-    std::lock_guard<std::mutex> lock(job->mutex);
-    if(!job->done.load())return env->NewStringUTF((std::string("RUNNING\n")+job->output).c_str());
-    if(!job->error.empty())return env->NewStringUTF((std::string("ERROR\n")+job->error).c_str());
-    return env->NewStringUTF((std::string("DONE\n")+job->output).c_str());
+    std::string response;
+    bool complete=false;
+    {
+        std::lock_guard<std::mutex> lock(job->mutex);
+        if(!job->done.load()){
+            response="RUNNING\n"+job->output;
+        }else if(!job->error.empty()){
+            response="ERROR\n"+job->error;
+            complete=true;
+        }else{
+            response="DONE\n"+job->output;
+            complete=true;
+        }
+    }
+    if(complete){
+        std::lock_guard<std::mutex> lock(jobs_mutex);
+        jobs.erase(key);
+    }
+    return env->NewStringUTF(response.c_str());
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -135,4 +153,19 @@ Java_com_naang360_missminutes_NativeBrain_cancelGenerationNative(JNIEnv* env,jcl
     const char* id=env->GetStringUTFChars(jid,nullptr);std::shared_ptr<Job> job;
     {std::lock_guard<std::mutex> lock(jobs_mutex);auto it=jobs.find(id?std::string(id):"");if(it!=jobs.end())job=it->second;}
     if(id)env->ReleaseStringUTFChars(jid,id);if(job)job->cancel.store(true);
+}
+
+    
+extern "C" JNIEXPORT void JNICALL
+Java_com_naang360_missminutes_NativeBrain_releaseModelNative(JNIEnv*,jclass){
+    std::lock_guard<std::mutex> serial(inference_mutex);
+    if(cached_model){
+        llama_model_free(cached_model);
+        cached_model=nullptr;
+        cached_model_path.clear();
+    }
+    if(backend_started){
+        llama_backend_free();
+        backend_started=false;
+    }
 }

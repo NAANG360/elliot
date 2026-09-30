@@ -33,8 +33,8 @@ jobs:
           base64 -d android/app/miss-minutes-release.jks.b64 > android/app/miss-minutes-release.jks
           chmod 600 android/app/miss-minutes-release.jks
       - name: Build signed release APK
-        run: gradle :app:assembleRelease --no-daemon
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
       - uses: actions/upload-artifact@v6
         with:
-          name: miss-minutes-0.6.9-apk
+          name: miss-minutes-0.7.0-apk
           path: android/app/build/outputs/apk/release/app-release.apk

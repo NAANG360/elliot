@@ -6,6 +6,7 @@ object NativeBrain {
     @JvmStatic external fun startGenerationNative(modelPath: String, prompt: String): String
     @JvmStatic external fun pollGenerationNative(jobId: String): String
     @JvmStatic external fun cancelGenerationNative(jobId: String)
+    @JvmStatic external fun releaseModelNative()
 
     fun available(): Boolean = try { nativeAvailable() } catch (_: Throwable) { false }
     fun generate(modelPath: String, prompt: String): String = try {
@@ -16,4 +17,5 @@ object NativeBrain {
     fun start(modelPath: String, prompt: String): String = startGenerationNative(modelPath, prompt)
     fun poll(jobId: String): String = pollGenerationNative(jobId)
     fun cancel(jobId: String) { try { cancelGenerationNative(jobId) } catch (_: Throwable) {} }
+    fun releaseModel() { try { releaseModelNative() } catch (_: Throwable) {} }
 }

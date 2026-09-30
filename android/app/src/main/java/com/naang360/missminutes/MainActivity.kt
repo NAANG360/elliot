@@ -8,6 +8,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -24,6 +25,7 @@ import android.webkit.WebView
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -40,6 +42,8 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var framework: FrameworkBridge
     private val modelRequest = 7412
+    private val mediaPermissionRequest = 9001
+    private var webLoaded = false
     private lateinit var sensorManager: SensorManager
     private var sensorBridge: SensorBridge? = null
 
@@ -57,9 +61,14 @@ class MainActivity : Activity() {
             webChromeClient = object : WebChromeClient() {
                 override fun onPermissionRequest(request: PermissionRequest) {
                     runOnUiThread {
-                        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                            request.grant(request.resources)
-                        } else request.deny()
+                        val granted = request.resources.filter { resource ->
+                            when (resource) {
+                                PermissionRequest.RESOURCE_VIDEO_CAPTURE -> checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+                                PermissionRequest.RESOURCE_AUDIO_CAPTURE -> checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                                else -> false
+                            }
+                        }.toTypedArray()
+                        if (granted.isNotEmpty()) request.grant(granted) else request.deny()
                     }
                 }
                 override fun onConsoleMessage(message: ConsoleMessage): Boolean {
@@ -68,11 +77,30 @@ class MainActivity : Activity() {
                 }
             }
             addJavascriptInterface(framework, "MissMinutesNative")
-            loadUrl("https://appassets.androidplatform.net/assets/web/index.html")
         }
         setContentView(web)
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
-        sensorBridge = SensorBridge(sensorManager, this).also { it.start() }
+        sensorBridge = SensorBridge(sensorManager, this)
+        ensureMediaPermissions()
+    }
+
+    private fun ensureMediaPermissions() {
+        val missing = buildList {
+            if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.CAMERA)
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.RECORD_AUDIO)
+        }
+        if (missing.isEmpty()) loadWebApp() else requestPermissions(missing.toTypedArray(), mediaPermissionRequest)
+    }
+
+    private fun loadWebApp() {
+        if (webLoaded) return
+        webLoaded = true
+        web.loadUrl("https://appassets.androidplatform.net/assets/web/index.html")
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == mediaPermissionRequest) loadWebApp()
     }
 
     private val assetLoader: WebViewAssetLoader by lazy {
@@ -110,7 +138,19 @@ class MainActivity : Activity() {
         )
     }
 
+    override fun onResume() {
+        super.onResume()
+        sensorBridge?.start()
+    }
+
+    override fun onPause() {
+        sensorBridge?.stop()
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        sensorBridge?.stop()
+        framework.shutdown()
         web.destroy()
         super.onDestroy()
     }
@@ -130,10 +170,18 @@ private class SensorBridge(private val manager: SensorManager, private val activ
     private val light = manager.getDefaultSensor(Sensor.TYPE_LIGHT)
     private val proximity = manager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
     private var lastAx=0f; private var lastAy=0f; private var lastAz=0f
+    private var lastEmitAt=0L
+    private var running=false
     fun start(){
+        if (running) return
+        running=true
         listOf(accel,gyro,light,proximity).filterNotNull().forEach { manager.registerListener(this,it,SensorManager.SENSOR_DELAY_GAME) }
     }
-    fun stop(){ manager.unregisterListener(this) }
+    fun stop(){
+        if (!running) return
+        running=false
+        manager.unregisterListener(this)
+    }
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
     override fun onSensorChanged(e: SensorEvent){
         when(e.sensor.type){
@@ -153,6 +201,9 @@ private class SensorBridge(private val manager: SensorManager, private val activ
         }
     }
     private fun emit(vararg pairs: Any){
+        val now=SystemClock.elapsedRealtime()
+        if (now-lastEmitAt<75L) return
+        lastEmitAt=now
         val json=JSONObject()
         var i=0
         while(i+1<pairs.size){json.put(pairs[i].toString(),pairs[i+1]);i+=2}
@@ -237,7 +288,8 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
                     val responseLength = connection.contentLengthLong
                     total = if (code == HttpURLConnection.HTTP_PARTIAL && responseLength >= 0L) downloaded + responseLength else responseLength
                     connection.inputStream.use { input ->
-                        part.outputStream(if (downloaded > 0L && code == HttpURLConnection.HTTP_PARTIAL) true else false).use { output ->
+                        val append = downloaded > 0L && code == HttpURLConnection.HTTP_PARTIAL
+                        FileOutputStream(part, append).use { output ->
                             val buf = ByteArray(1024 * 1024)
                             var readTotal = downloaded
                             var lastPercent = -1
@@ -348,12 +400,33 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
         return try {
             activity.contentResolver.openInputStream(uri)?.use { input ->
                 out.outputStream().use { output -> input.copyTo(output, 1024 * 1024) }
+            } ?: return null
+            if (!looksLikeGguf(out)) {
+                out.delete()
+                return null
             }
             File(root, "active-model.txt").writeText(out.name)
             out
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun looksLikeGguf(file: File): Boolean {
+        if (file.length() < 4L) return false
+        return try {
+            java.io.RandomAccessFile(file, "r").use { raf ->
+                val magic = ByteArray(4)
+                raf.readFully(magic)
+                magic.contentEquals(byteArrayOf('G'.code.toByte(), 'G'.code.toByte(), 'U'.code.toByte(), 'F'.code.toByte()))
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun shutdown() {
+        NativeBrain.releaseModel()
     }
 
     private fun queryName(uri: Uri): String? {
