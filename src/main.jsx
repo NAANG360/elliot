@@ -116,7 +116,7 @@ function App(){
   return()=>idle.stop();
  },[]);
 
- useEffect(()=>save(kernel),[kernel]);
+ useEffect(()=>{save(kernel)},[kernel]);
  useEffect(()=>{
   const onSensor=e=>setSenses(s=>({...s,...(e?.detail||{})}));
   window.addEventListener("miss-sensor-event",onSensor);
@@ -156,7 +156,7 @@ function App(){
   try{const raw=globalThis.MissMinutesNative?.modelStatus?.();if(raw){const d=JSON.parse(raw);setKernel(k=>({...k,localModel:{...k.localModel,...d,ready:Boolean(d.ready)}}))}}catch(e){console.warn("model status unavailable",e)}
   return()=>{window.removeEventListener("miss-model-event",onModel);window.removeEventListener("error",onError);window.removeEventListener("unhandledrejection",onReject)}
  },[]);
- useEffect(()=>end.current?.scrollIntoView({behavior:"smooth"}),[messages]);
+ useEffect(()=>{end.current?.scrollIntoView({behavior:"smooth"})},[messages]);
  const speak=t=>{if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.02;u.pitch=1.08;u.onstart=()=>setMode("speaking");u.onend=()=>setMode("idle");window.speechSynthesis.speak(u)};
  function send(v=input){
   v=v.trim();if(!v)return;
@@ -205,6 +205,6 @@ function Modal({title,close,children}){return <div className="overlay" onClick={
 class ErrorBoundary extends React.Component{
  constructor(p){super(p);this.state={error:""}}
  static getDerivedStateFromError(e){return{error:String(e?.stack||e?.message||e)}}
- render(){return this.state.error?<div className="fatal"><h2>THE TIMELINE STUMBLED</h2><p className="fatal-error">{this.state.error}</p><button onClick={()=>{try{localStorage.removeItem(STATE)}catch{};location.reload()}}>Reset local framework</button></div>:this.props.children}
+ render(){return this.state.error?<div className="fatal"><h2>THE TIMELINE STUMBLED</h2><p className="fatal-error">{this.state.error}{this.state.component}</p><button onClick={()=>{try{localStorage.removeItem(STATE)}catch{};location.reload()}}>Reset local framework</button></div>:this.props.children}
 }
 createRoot(document.getElementById("root")).render(<ErrorBoundary><App/></ErrorBoundary>);
