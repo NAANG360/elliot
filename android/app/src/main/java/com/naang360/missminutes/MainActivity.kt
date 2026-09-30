@@ -1,9 +1,11 @@
 package com.naang360.missminutes
 
 import android.app.Activity
+import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
-import android.view.View
+import android.provider.OpenableColumns
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -11,7 +13,6 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.TextView
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import java.io.File
@@ -20,13 +21,14 @@ import java.time.Instant
 class MainActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var framework: FrameworkBridge
+    private val modelRequest = 7412
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
-        framework = FrameworkBridge(filesDir.resolve("framework"))
+        framework = FrameworkBridge(filesDir.resolve("framework"), this)
 
         web = WebView(this).apply {
-            setBackgroundColor(Color.rgb(12, 10, 7))
+            setBackgroundColor(Color.rgb(12, 8, 4))
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = false
@@ -42,7 +44,6 @@ class MainActivity : Activity() {
             addJavascriptInterface(framework, "MissMinutesNative")
             loadUrl("https://appassets.androidplatform.net/assets/web/index.html")
         }
-
         setContentView(web)
     }
 
@@ -50,6 +51,25 @@ class MainActivity : Activity() {
         WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .build()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != modelRequest || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        val file = framework.importModel(uri) ?: return
+        web.post {
+            val name = file.name.replace("\\","\\\\").replace("'","\\'")
+            val path = file.absolutePath.replace("\\","\\\\").replace("'","\\'")
+            web.evaluateJavascript("window.dispatchEvent(new CustomEvent('miss-model-ready',{detail:{name:'$name',path:'$path',ready:true}}))", null)
+        }
+    }
+
+    fun openModelPicker() {
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/octet-stream"
+        }, modelRequest)
     }
 
     override fun onDestroy() {
@@ -64,28 +84,49 @@ private class AppAssetClient(private val loader: WebViewAssetLoader) : WebViewCl
     }
 }
 
-class FrameworkBridge(private val root: File) {
-    init { root.mkdirs() }
+class FrameworkBridge(private val root: File, private val activity: MainActivity) {
+    init { root.mkdirs(); File(root, "models").mkdirs() }
 
-    @JavascriptInterface
-    fun frameworkPath(): String = root.absolutePath
+    @JavascriptInterface fun frameworkPath(): String = root.absolutePath
+    @JavascriptInterface fun nativeRuntimeStatus(): String = "MODEL_STORAGE_READY"
 
-    @JavascriptInterface
-    fun checkpoint(json: String, reason: String): String {
+    @JavascriptInterface fun pickModel() {
+        activity.runOnUiThread { activity.openModelPicker() }
+    }
+
+    fun importModel(uri: Uri): File? {
+        val name = queryName(uri) ?: "model.gguf"
+        if (!name.lowercase().endsWith(".gguf")) return null
+        val safe = name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val out = File(root, "models/$safe")
+        return try {
+            activity.contentResolver.openInputStream(uri)?.use { input ->
+                out.outputStream().use { output -> input.copyTo(output, 1024 * 1024) }
+            }
+            out
+        } catch (_: Exception) { null }
+    }
+
+    private fun queryName(uri: Uri): String? {
+        activity.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) return c.getString(0)
+        }
+        return uri.lastPathSegment?.substringAfterLast('/')
+    }
+
+    @JavascriptInterface fun checkpoint(json: String, reason: String): String {
         val file = File(root, "checkpoint-${System.currentTimeMillis()}.json")
         file.writeText(json)
         File(root, "last-good.txt").writeText(file.name)
         return file.name
     }
 
-    @JavascriptInterface
-    fun windUp(): String {
+    @JavascriptInterface fun windUp(): String {
         val name = File(root, "last-good.txt").takeIf { it.exists() }?.readText()?.trim()
         return if (name.isNullOrBlank()) "" else File(root, name).takeIf { it.exists() }?.readText().orEmpty()
     }
 
-    @JavascriptInterface
-    fun recordEvolution(summary: String): Boolean {
+    @JavascriptInterface fun recordEvolution(summary: String): Boolean {
         File(root, "evolution.log").appendText("${Instant.now()} | $summary\n")
         return true
     }
