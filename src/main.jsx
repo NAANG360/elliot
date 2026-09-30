@@ -32,6 +32,14 @@ window.MissMinutesFramework={
  ledger:()=>clone(load().evolution.ledger)
 };
 
+function parseModelReply(raw){
+ const text=String(raw||"").trim();
+ try{
+  const parsed=JSON.parse(text.replace(/^\`\`\`json\s*|^\`\`\`|\`\`\`$/g,"").trim());
+  if(parsed&&typeof parsed.text==="string")return parsed;
+ }catch{}
+ return {text,emotion:"neutral",gesture:"idle",pace:"normal"};
+}
 function demoBrain(text,kernel){
  const q=text.toLowerCase();
  if(q.includes("wind up")||q.includes("rollback"))return"Well now, sugar, if the timeline gets tangled, Wind Up the Clock can restore my last known-good framework.";
@@ -50,10 +58,31 @@ function App(){
  const[mode,setMode]=useState("idle");
  const[panel,setPanel]=useState(null);
  const end=useRef(null);
+ const generationRef=useRef(null);
  useEffect(()=>save(kernel),[kernel]); useEffect(()=>{const fn=e=>setKernel(k=>({...k,localModel:{name:e.detail?.name||"Local GGUF",path:e.detail?.path||"",ready:Boolean(e.detail?.ready)}}));window.addEventListener("miss-model-ready",fn);return()=>window.removeEventListener("miss-model-ready",fn)},[]);
  useEffect(()=>end.current?.scrollIntoView({behavior:"smooth"}),[messages]);
  const speak=t=>{if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.02;u.pitch=1.08;u.onstart=()=>setMode("speaking");u.onend=()=>setMode("idle");window.speechSynthesis.speak(u)};
- function send(v=input){v=v.trim();if(!v)return;setInput("");setMessages(m=>[...m,{role:"user",text:v}]);setMode("thinking");setTimeout(()=>{let r=demoBrain(v,kernel);try{const bridge=globalThis.MissMinutesNative;if(kernel.localModel.ready&&bridge?.generateLocal){r=bridge.generateLocal(kernel.localModel.path,v)}}catch(e){r="[LOCAL_BRAIN_ERROR] "+(e?.message||"native inference failed")}setMessages(m=>[...m,{role:"assistant",text:r}]);setMode("idle");speak(r)},220)}
+ function send(v=input){
+  v=v.trim();if(!v)return;
+  setInput("");setMessages(m=>[...m,{role:"user",text:v}]);setMode("thinking");
+  const bridge=globalThis.MissMinutesNative;
+  if(kernel.localModel.ready&&bridge?.startGeneration&&bridge?.pollGeneration){
+   try{
+    const job=bridge.startGeneration(kernel.localModel.path,v);generationRef.current=job;
+    const poll=()=>{
+     if(generationRef.current!==job)return;
+     let packet="";try{packet=bridge.pollGeneration(job)}catch(e){packet="ERROR\\n"+(e?.message||"poll failed")}
+     const cut=packet.indexOf("\\n");const status=cut<0?packet:packet.slice(0,cut);const body=cut<0?"":packet.slice(cut+1);
+     if(status==="RUNNING"){setMode("thinking");setTimeout(poll,90);return}
+     generationRef.current=null;
+     const reply=status==="DONE"?parseModelReply(body):{text:status==="ERROR"?body:demoBrain(v,kernel),emotion:"concerned",gesture:"reset",pace:"normal"};
+     setMessages(m=>[...m,{role:"assistant",text:reply.text}]);setMode("idle");speak(reply.text);
+    };
+    setTimeout(poll,80);return;
+   }catch(e){console.warn("native generation unavailable",e)}
+  }
+  setTimeout(()=>{const reply=parseModelReply(demoBrain(v,kernel));setMessages(m=>[...m,{role:"assistant",text:reply.text}]);setMode("idle");speak(reply.text)},220);
+ }
  function evolve(){setKernel(old=>{let k=checkpoint(clone(old),"before self-improvement");const n=k.evolution.generation+1;const change={id:crypto.randomUUID(),at:new Date().toISOString(),generation:n,summary:"Expanded local evolution capacity and refreshed character guidance.",details:"Self-improvement changed the editable behavior layer only.",reversible:true};k.persona.rules=[...new Set([...k.persona.rules,"Preserve the retro clock-character visual identity while evolving."])];k.evolution.generation=n;k.evolution.ledger=[change,...k.evolution.ledger].slice(0,50);return k});setMessages(m=>[...m,{role:"assistant",text:"There we go! I improved the framework and tucked the previous timeline into a checkpoint."}])}
  function rollback(){setKernel(old=>windUp(old));setMessages(m=>[...m,{role:"assistant",text:"Winding the clock... back to the last known-good framework."}]);setMode("idle")}
  function addMemory(){const v=prompt("What should I remember locally?");if(v?.trim())setKernel(k=>({...k,memories:[...k.memories,v.trim()]}))}

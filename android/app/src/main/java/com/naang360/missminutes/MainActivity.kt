@@ -113,6 +113,19 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
         NativeBrain.generate(modelPath, prompt)
 
     @JavascriptInterface
+    fun startGeneration(modelPath: String, prompt: String): String =
+        NativeBrain.start(modelPath, prompt)
+
+    @JavascriptInterface
+    fun pollGeneration(jobId: String): String =
+        NativeBrain.poll(jobId)
+
+    @JavascriptInterface
+    fun cancelGeneration(jobId: String) {
+        NativeBrain.cancel(jobId)
+    }
+
+    @JavascriptInterface
     fun checkpoint(json: String, reason: String): String {
         val file = File(root, "checkpoint-${System.currentTimeMillis()}.json")
         file.writeText(json)
