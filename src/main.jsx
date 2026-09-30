@@ -15,6 +15,20 @@ function save(k){localStorage.setItem(STATE,JSON.stringify(k))}
 function clone(v){return JSON.parse(JSON.stringify(v))}
 function checkpoint(k,reason="before evolution"){const snap={id:crypto.randomUUID(),at:new Date().toISOString(),reason,kernel:clone(k)};k.evolution.snapshots=[snap,...k.evolution.snapshots].slice(0,12);k.evolution.lastGood=snap.id;return k}
 function windUp(k){const id=k.evolution.lastGood;const snap=k.evolution.snapshots.find(s=>s.id===id)||k.evolution.snapshots[0];return snap?clone(snap.kernel):k}
+function applyFrameworkPatch(k,patch,summary="self-improvement"){
+ const next=checkpoint(clone(k),"before "+summary);
+ const apply=(target,path,value)=>{let o=target;for(let i=0;i<path.length-1;i++){const key=path[i];if(!o[key]||typeof o[key]!=="object")o[key]={};o=o[key]}o[path[path.length-1]]=value};
+ for(const op of patch||[]){if(!Array.isArray(op.path)||!op.path.length)continue;if(op.op==="set")apply(next,op.path,clone(op.value));if(op.op==="delete"){let o=next;for(let i=0;i<op.path.length-1;i++)o=o?.[op.path[i]];if(o&&typeof o==="object")delete o[op.path[op.path.length-1]]}}
+ const entry={id:crypto.randomUUID(),at:new Date().toISOString(),generation:next.evolution.generation+1,summary,details:"Editable framework patch",patch:clone(patch),reversible:true};
+ next.evolution.generation++;next.evolution.ledger=[entry,...next.evolution.ledger].slice(0,50);return next;
+}
+window.MissMinutesFramework={
+ get:()=>clone(load()),
+ checkpoint:(reason)=>{let k=load();k=checkpoint(k,reason);save(k);return clone(k)},
+ apply:(patch,summary)=>{const k=applyFrameworkPatch(load(),patch,summary);save(k);return clone(k)},
+ windUp:()=>{const k=windUp(load());save(k);return clone(k)},
+ ledger:()=>clone(load().evolution.ledger)
+};
 
 function demoBrain(text,kernel){
  const q=text.toLowerCase();
