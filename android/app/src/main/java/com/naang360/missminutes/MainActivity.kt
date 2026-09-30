@@ -18,7 +18,7 @@ import androidx.webkit.WebViewClientCompat
 import java.io.File
 import java.time.Instant
 
-class MainActivity : Activity() {
+class MainActivity : Activity() {\n    companion object { init { try { System.loadLibrary("missminutes") } catch (_: UnsatisfiedLinkError) {} } }
     private lateinit var web: WebView
     private lateinit var framework: FrameworkBridge
     private val modelRequest = 7412
@@ -87,7 +87,7 @@ private class AppAssetClient(private val loader: WebViewAssetLoader) : WebViewCl
 class FrameworkBridge(private val root: File, private val activity: MainActivity) {
     init { root.mkdirs(); File(root, "models").mkdirs() }
 
-    @JavascriptInterface fun frameworkPath(): String = root.absolutePath
+    @JavascriptInterface fun frameworkPath(): String = root.absolutePath\n\n    @JavascriptInterface fun nativeRuntimeStatus(): String = if (NativeBrain.available()) "LOCAL_LLM_READY" else "MODEL_STORAGE_ONLY"\n\n    @JavascriptInterface fun generateLocal(modelPath: String, prompt: String): String = NativeBrain.generate(modelPath, prompt)
     @JavascriptInterface fun nativeRuntimeStatus(): String = "MODEL_STORAGE_READY"
 
     @JavascriptInterface fun pickModel() {
