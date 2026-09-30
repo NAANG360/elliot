@@ -69,10 +69,14 @@ class MainActivity : Activity() {
             val name = file.name.replace("\\", "\\\\").replace("'", "\\'")
             val path = file.absolutePath.replace("\\", "\\\\").replace("'", "\\'")
             web.evaluateJavascript(
-                "window.dispatchEvent(new CustomEvent('miss-model-ready',{detail:{name:'$name',path:'$path',ready:true}}))",
+                "window.dispatchEvent(new CustomEvent('miss-model-event',{detail:{name:'$name',path:'$path',ready:true,status:'ready',progress:100,source:'Imported GGUF'}}))",
                 null
             )
         }
+    }
+
+    fun dispatchModelEvent(script: String) {
+        web.post { web.evaluateJavascript(script, null) }
     }
 
     fun openModelPicker() {
@@ -111,6 +115,11 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
 
     @JavascriptInterface
     fun frameworkPath(): String = root.absolutePath
+
+    @JavascriptInterface
+    fun pickModel() {
+        activity.openModelPicker()
+    }
 
     @JavascriptInterface
     fun modelStatus(): String {
@@ -196,7 +205,7 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
             put("source", "Qwen2.5-0.5B-Instruct Q4_K_M")
         }.toString()
         val script = "window.dispatchEvent(new CustomEvent(\"miss-model-event\",{detail:" + detail + "}))"
-        activity.runOnUiThread { activity.web.evaluateJavascript(script, null) }
+        activity.dispatchModelEvent(script)
     }
 
     @JavascriptInterface
