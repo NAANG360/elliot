@@ -33,10 +33,10 @@ jobs:
           base64 -d android/app/miss-minutes-release.jks.b64 > android/app/miss-minutes-release.jks
           chmod 600 android/app/miss-minutes-release.jks
       - name: Set release version
-        run: sed -i 's/versionCode=24/versionCode=24/; s/versionName="0.6.2"/versionName="0.6.2"/' android/app/build.gradle.kts
+        run: sed -i 's/versionCode=25/versionCode=24/; s/versionName="0.6.3"/versionName="0.6.2"/' android/app/build.gradle.kts
       - name: Build signed release APK
         run: gradle :app:assembleRelease --no-daemon
       - uses: actions/upload-artifact@v6
         with:
-          name: miss-minutes-0.6.2-apk
+          name: miss-minutes-0.6.3-apk
           path: android/app/build/outputs/apk/release/app-release.apk
