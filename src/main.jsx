@@ -147,10 +147,8 @@ function App(){
     const job=bridge.startGeneration(kernel.localModel.path,v);generationRef.current=job;
     const poll=()=>{
      if(generationRef.current!==job)return;
-     let packet="";try{packet=bridge.pollGeneration(job)}catch(e){packet="ERROR
-"+(e?.message||"poll failed")}
-     const cut=packet.indexOf("
-");const status=cut<0?packet:packet.slice(0,cut);const body=cut<0?"":packet.slice(cut+1);
+     let packet="";try{packet=bridge.pollGeneration(job)}catch(e){packet="ERROR\\n"+(e?.message||"poll failed")}
+     const cut=packet.indexOf("\\n");const status=cut<0?packet:packet.slice(0,cut);const body=cut<0?"":packet.slice(cut+1);
      if(status==="RUNNING"){setMode("thinking");setTimeout(poll,90);return}
      generationRef.current=null;
      const reply=status==="DONE"?parseModelReply(body):{text:status==="ERROR"?body:demoBrain(v,kernel),emotion:"concerned",gesture:"reset",pace:"normal"};
