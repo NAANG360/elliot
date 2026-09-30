@@ -1,6 +1,6 @@
 package com.naang360.missminutes
 
-import android.app.Activity
+import android.app.Activity\nimport android.Manifest\nimport android.content.pm.PackageManager\nimport android.webkit.PermissionRequest
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
@@ -43,7 +43,7 @@ class MainActivity : Activity() {
             settings.allowContentAccess = false
             settings.databaseEnabled = true
             webViewClient = AppAssetClient(assetLoader)
-            webChromeClient = object : WebChromeClient() {
+            webChromeClient = object : WebChromeClient() {\n                override fun onPermissionRequest(request: PermissionRequest) {\n                    runOnUiThread {\n                        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {\n                            request.grant(request.resources)\n                        } else request.deny()\n                    }\n                }
                 override fun onConsoleMessage(message: ConsoleMessage): Boolean {
                     android.util.Log.e("MissMinutes", "JS: ${message.message()} @${message.sourceId()}:${message.lineNumber()}")
                     return true
