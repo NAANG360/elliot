@@ -9,8 +9,8 @@ android {
         applicationId="com.naang360.missminutes"
         minSdk=28
         targetSdk=36
-        versionCode=16
-        versionName="0.5.4"
+        versionCode=19
+        versionName="0.5.7"
         ndk { abiFilters += listOf("arm64-v8a") }
     }
     compileOptions {
