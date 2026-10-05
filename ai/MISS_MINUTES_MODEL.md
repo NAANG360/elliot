@@ -52,3 +52,16 @@ The repository's next AI milestone is a reproducible LoRA/QLoRA training pipelin
 ## Safety boundary
 
 Self-improvement may modify the editable behavior/framework layer, but every framework mutation is checkpointed first and reversible through **Wind Up the Clock**. Model weights themselves are not silently overwritten by the app.
+
+
+## Parameter-growth ladder
+
+The project now treats model capacity as an explicit evolution track rather than a pretend runtime resize:
+
+1. **0.5B** — Qwen2.5-0.5B-Instruct, the current starter brain.
+2. **~1B** — an independently evaluated 1B-class checkpoint. This is a family change, so the Miss Minutes behavior corpus must be re-trained/evaluated rather than copied as if the network simply grew.
+3. **1.5B** — Qwen2.5-1.5B-Instruct, the first larger target.
+
+A larger checkpoint is only promoted after behavior regression, capability, memory, latency, load/unload, artifact-integrity, and Guardian-reachability tests pass. The old checkpoint remains available for rollback.
+
+The Android app records the ladder, training generations, evaluation results, staged artifacts, and promotion history in ModelEvolution. It does not claim that a running 0.5B model can add parameters to itself; the actual growth event is training/fine-tuning a new set of weights and then atomically switching the active model.
