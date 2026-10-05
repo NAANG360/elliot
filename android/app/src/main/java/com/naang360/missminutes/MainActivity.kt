@@ -88,11 +88,21 @@ class MainActivity : Activity() {
     }
 
     private fun ensureMediaPermissions() {
-        val missing = buildList {
-            if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.CAMERA)
-            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.RECORD_AUDIO)
-        }
-        if (missing.isEmpty()) loadWebApp() else requestPermissions(missing.toTypedArray(), mediaPermissionRequest)
+        loadWebApp()
+    }
+
+    @JavascriptInterface
+    fun hasMediaPermission(kind: String): Boolean {
+        val permission = if (kind.equals("camera", true)) Manifest.permission.CAMERA else Manifest.permission.RECORD_AUDIO
+        return checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+    }
+
+    @JavascriptInterface
+    fun requestMediaAccess(kind: String): Boolean {
+        val permission = if (kind.equals("camera", true)) Manifest.permission.CAMERA else Manifest.permission.RECORD_AUDIO
+        if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) return true
+        requestPermissions(arrayOf(permission), mediaPermissionRequest)
+        return false
     }
 
     private fun loadWebApp() {
