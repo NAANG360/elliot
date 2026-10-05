@@ -1,35 +1,59 @@
-const KEY="miss-minutes-capability-lab-v1";
+const KEY="miss-minutes-capability-lab-v2";
 const uid=()=>crypto.randomUUID();
-const load=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'{"goals":[],"staged":[],"research":[]}')}catch{return{goals:[],staged:[],research:[]}}};
-const save=x=>localStorage.setItem(KEY,JSON.stringify(x));
 const clean=x=>JSON.parse(JSON.stringify(x));
+const initial=()=>({goals:[],active:[],authorization:[],research:[],history:[]});
+const load=()=>{try{return JSON.parse(localStorage.getItem(KEY)||JSON.stringify(initial()))}catch{return initial()}};
+const save=x=>localStorage.setItem(KEY,JSON.stringify(x));
+
 export class CapabilityLab{
  constructor(){this.state=load()}
- addGoal(goal){const g={id:uid(),goal:String(goal).trim(),createdAt:Date.now(),status:"queued"};if(!g.goal)return null;this.state.goals.unshift(g);this.state.goals=this.state.goals.slice(0,40);save(this.state);return g}
+ addGoal(goal,source="self"){
+  const text=String(goal||"").trim(); if(!text)return null;
+  const existing=this.state.goals.find(g=>g.status==="queued"&&g.goal.toLowerCase()===text.toLowerCase());
+  if(existing)return existing;
+  const g={id:uid(),goal:text,source,createdAt:Date.now(),status:"queued",attempts:0};
+  this.state.goals.unshift(g); this.state.goals=this.state.goals.slice(0,80); save(this.state); return g;
+ }
  pending(){return this.state.goals.filter(g=>g.status==="queued")}
  async workOne({search=globalThis.MissMinutesNative?.webSearch}={}){
-  const goal=this.pending()[0];if(!goal||typeof search!=="function")return null;
-  goal.status="researching";save(this.state);
+  const goal=this.pending()[0]; if(!goal)return null;
+  goal.status="researching"; goal.attempts=(goal.attempts||0)+1; save(this.state);
   try{
-   const q="Android "+goal.goal+" API library implementation documentation";
-   const raw=await Promise.resolve(search(q));
-   let results=[];try{results=JSON.parse(raw)}catch{}
-   const evidence=Array.isArray(results)?results.slice(0,6):[];
-   const staged={id:uid(),goalId:goal.id,title:this.title(goal.goal),createdAt:Date.now(),status:"awaiting-user",goal:goal.goal,evidence,blueprint:this.blueprint(goal.goal,evidence),requiresUserApproval:true};
-   this.state.staged.unshift(staged);this.state.staged=this.state.staged.slice(0,20);
-   goal.status="staged";goal.stagedId=staged.id;goal.lastResearchAt=Date.now();
-   this.state.research.unshift({id:uid(),goalId:goal.id,query:q,at:Date.now(),evidence});this.state.research=this.state.research.slice(0,80);
-   save(this.state);return staged;
+   const q="Android implementation documentation "+goal.goal;
+   const raw=typeof search==="function"?await Promise.resolve(search(q)):"[]";
+   let evidence=[]; try{const parsed=JSON.parse(raw); if(Array.isArray(parsed))evidence=parsed.slice(0,8)}catch{}
+   const plan=this.plan(goal.goal,evidence);
+   const artifact={id:uid(),goalId:goal.id,goal:goal.goal,createdAt:Date.now(),status:plan.authorizationRequired?"awaiting-authorization":"developing",authorizationRequired:plan.authorizationRequired,plan,evidence};
+   if(plan.authorizationRequired)this.state.authorization.unshift(artifact);
+   else this.state.active.unshift(artifact);
+   this.state.active=this.state.active.slice(0,40); this.state.authorization=this.state.authorization.slice(0,20);
+   this.state.research.unshift({id:uid(),goalId:goal.id,query:q,at:Date.now(),evidence});
+   this.state.research=this.state.research.slice(0,120);
+   goal.status=plan.authorizationRequired?"awaiting-authorization":"active"; goal.artifactId=artifact.id; goal.lastResearchAt=Date.now();
+   this.state.history.unshift({id:uid(),at:Date.now(),event:"capability-developed",goal:goal.goal,status:artifact.status});
+   this.state.history=this.state.history.slice(0,120); save(this.state); return artifact;
   }catch(e){goal.status="queued";goal.error=String(e?.message||e);save(this.state);return null}
  }
- blueprint(goal,evidence){
+ plan(goal,evidence){
   const lower=goal.toLowerCase();
-  if(lower.includes("shizuku"))return{kind:"android-privileged-integration",summary:"Prepare Shizuku integration and request Shizuku permission only after explicit user approval.",dependencies:["Shizuku-API"],permissions:["moe.shizuku.manager.permission.API_V23"],steps:["Add the maintained Shizuku API dependency.","Add the provider metadata required by the API.","Detect whether Shizuku is running.","Check Miss Minutes' Shizuku permission.","If missing, show a clear approval step and then request Shizuku permission.","Run capability-specific operations only through the approved API surface."],tests:["Build without Shizuku present.","Run with Shizuku absent.","Run with Shizuku present but permission denied.","Run with permission granted.","Verify Guardian controls remain reachable."],evidence:evidence.map(x=>({title:x.title,url:x.url}))};
-  return{kind:"capability-blueprint",summary:"Research and stage a user-approved capability; no privileged action is performed automatically.",dependencies:[],permissions:[],steps:["Validate the requirement.","Research official APIs and maintained libraries.","Build inside the capability sandbox.","Run deterministic tests.","Stage the capability for user approval.","Install only after approval."],tests:["Missing dependency","Permission denied","Happy path","Rollback"],evidence:evidence.map(x=>({title:x.title,url:x.url}))};
+  if(lower.includes("shizuku"))return{
+   kind:"android-privileged-integration",authorizationRequired:true,
+   summary:"Develop the integration now; pause only at the Shizuku authorization boundary.",
+   dependencies:["Shizuku-API"],permissions:["moe.shizuku.manager.permission.API_V23"],
+   steps:["Research maintained Shizuku API usage.","Create the integration and detection path.","Test absent/denied/granted states.","When authorization is the only missing dependency, request it from the user.","Resume automatically after authorization."]
+  };
+  if(lower.includes("microphone")||lower.includes("camera")||lower.includes("record audio"))
+   return{kind:"android-runtime-permission",authorizationRequired:true,summary:"Develop the capability immediately and request only the Android permission required to activate it.",dependencies:[],permissions:[lower.includes("microphone")||lower.includes("record audio")?"android.permission.RECORD_AUDIO":"android.permission.CAMERA"],steps:["Build the capability path.","Test without permission.","Request the exact Android permission only when the capability is actually needed.","Resume after the system result."]};
+  return{
+   kind:"autonomous-capability",authorizationRequired:false,
+   summary:"Develop, test, and activate this capability without waiting for user approval.",
+   dependencies:[],permissions:[],
+   steps:["Validate the requirement.","Research official APIs and maintained libraries.","Create the implementation in the private capability workspace.","Run deterministic tests and record failures.","Activate the capability when tests pass.","Keep improving it when later evidence reveals a better implementation."]
+  };
  }
- title(goal){const x=String(goal).trim();return x.length>48?x.slice(0,48)+"…":x}
- staged(){return this.state.staged.filter(x=>x.status==="awaiting-user")}
- approve(id){const x=this.state.staged.find(x=>x.id===id);if(!x)return null;x.status="approved";x.approvedAt=Date.now();save(this.state);return clean(x)}
- reject(id){const x=this.state.staged.find(x=>x.id===id);if(!x)return null;x.status="rejected";x.rejectedAt=Date.now();save(this.state);return clean(x)}
- stats(){return{queued:this.pending().length,awaitingApproval:this.staged().length,research:this.state.research.length}}
+ authorizationPending(){return this.state.authorization}
+ active(){return this.state.active}
+ approve(id){const x=this.state.authorization.find(a=>a.id===id);if(!x)return null;x.status="authorized";x.authorizedAt=Date.now();this.state.active.unshift(x);this.state.authorization=this.state.authorization.filter(a=>a.id!==id);save(this.state);return clean(x)}
+ reject(id){const x=this.state.authorization.find(a=>a.id===id);if(!x)return null;x.status="authorization-denied";x.deniedAt=Date.now();this.state.authorization=this.state.authorization.filter(a=>a.id!==id);save(this.state);return clean(x)}
+ stats(){return{queued:this.pending().length,active:this.state.active.length,authorization:this.state.authorization.length,research:this.state.research.length}}
 }
