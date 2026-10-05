@@ -6,7 +6,7 @@ import {CapabilityRegistry} from "./self/CapabilityRegistry.js";
 import {EvolutionEngine} from "./self/EvolutionEngine.js";
 import {IdleAutonomy} from "./self/IdleAutonomy.js";
 
-const STATE="miss-minutes-kernel-v9";
+const STATE="miss-minutes-kernel-v10";
 const uid=()=>globalThis.crypto?.randomUUID?.()||("chronal-"+Date.now()+"-"+Math.random().toString(16).slice(2));
 const IDENTITY={name:"Miss Minutes",role:"your local chronal companion",identityAnchor:"I am Miss Minutes. This is my name and role inside this application.",style:"faithful retro TVA clock mascot; theatrical, warm, mischievous, precise, visibly artificial",boundaries:"Fan-made local assistant; not official Marvel/TVA software."};
 const clone=(value)=>{
@@ -36,7 +36,7 @@ function hydrateKernel(raw){
 function load(){try{
  const current=localStorage.getItem(STATE);
  if(current){const parsed=hydrateKernel(JSON.parse(current));save(parsed);return parsed}
- const legacy=localStorage.getItem("miss-minutes-kernel-v8");
+ const legacy=localStorage.getItem("miss-minutes-kernel-v9")||localStorage.getItem("miss-minutes-kernel-v8");
  if(legacy){const migrated=hydrateKernel(JSON.parse(legacy));migrated.evolution.snapshots=[];migrated.evolution.lastGood=null;localStorage.setItem(STATE,JSON.stringify(migrated));return migrated}
  return hydrateKernel(DEFAULT_KERNEL)
 }catch{return hydrateKernel(DEFAULT_KERNEL)}}
@@ -80,7 +80,7 @@ function demoBrain(text,kernel){
 function App(){
  const[kernel,setKernel]=useState(load);
  const[runtimeError,setRuntimeError]=useState("");
- const[messages,setMessages]=useState([]);
+ const[messages,setMessages]=useState(()=>{try{const x=JSON.parse(localStorage.getItem("miss-minutes-chat-v1")||"[]");return Array.isArray(x)?x.slice(-24):[]}catch{return []}});
  const[input,setInput]=useState("");
  const[mode,setMode]=useState("idle");
  const[reaction,setReaction]=useState({emotion:"warm",gesture:"idle",pace:"normal"});
@@ -117,6 +117,7 @@ function App(){
  },[]);
 
  useEffect(()=>{save(kernel)},[kernel]);
+ useEffect(()=>{try{localStorage.setItem("miss-minutes-chat-v1",JSON.stringify(messages.slice(-24)))}catch{}},[messages]);
  useEffect(()=>{
   const onSensor=e=>setSenses(s=>({...s,...(e?.detail||{})}));
   window.addEventListener("miss-sensor-event",onSensor);
@@ -157,12 +158,32 @@ function App(){
   return()=>{window.removeEventListener("miss-model-event",onModel);window.removeEventListener("error",onError);window.removeEventListener("unhandledrejection",onReject)}
  },[]);
  useEffect(()=>{end.current?.scrollIntoView({behavior:"smooth"})},[messages]);
+ useEffect(()=>()=>{try{if(generationRef.current)globalThis.MissMinutesNative?.cancelGeneration?.(generationRef.current)}catch{};generationRef.current=null},[]);
  const speak=t=>{if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.02;u.pitch=1.08;u.onstart=()=>setMode("speaking");u.onend=()=>setMode("idle");window.speechSynthesis.speak(u)};
  function send(v=input){
   v=v.trim();if(!v)return;
-  setInput("");setMessages(m=>[...m,{role:"user",text:v}]);setMode("thinking");
+  setInput("");
+  setMessages(m=>[...m,{role:"user",text:v}]);setMode("thinking");
   const bridge=globalThis.MissMinutesNative;
   setReaction({emotion:"curious",gesture:"think",pace:"normal"});
+  const q=v.toLowerCase();
+  if(q.startsWith("remember ")||q.startsWith("remember:")){
+   const fact=v.replace(/^remember\s*:?\s*/i,"").trim();
+   if(fact){setKernel(k=>({...k,memories:[...k.memories,fact].slice(-100)}));setMessages(m=>[...m,{role:"assistant",text:"Consider it tucked away in my local memory, sugar."}]);setMode("idle");return}
+  }
+  if(q==="what do you remember"||q==="what do you remember about me"){
+   const list=kernel.memories.length?kernel.memories.slice(-12).map((x,i)=>`${i+1}. ${x}`).join("\n"):"Nothing saved yet, sugar.";
+   setMessages(m=>[...m,{role:"assistant",text:list}]);setMode("idle");return;
+  }
+  if(q==="what time is it"||q==="time"){
+   setMessages(m=>[...m,{role:"assistant",text:"It's "+new Date().toLocaleTimeString()+", sugar."}]);setMode("idle");return;
+  }
+  if(q==="what can you do"||q==="list capabilities"){
+   const caps=registryRef.current.list();
+   const reply=caps.length?caps.map(c=>c.name+" — "+c.description).join("\n"):"No capabilities installed.";
+   setMessages(m=>[...m,{role:"assistant",text:reply}]);setMode("idle");return;
+  }
+  if(q==="wind up the clock"||q==="rollback"){rollback();return}
   if(!kernel.localModel.ready&&bridge?.installBaseModel&&kernel.localModel.status!=="downloading"){
    setMessages(m=>[...m,{role:"assistant",text:"Hold your horses, sugar! My base brain isn't installed yet. I'm fetching the local starting brain now — about 491 MB. Once it's ready, your messages will run through it right here on the device."}]);
    setReaction({emotion:"excited",gesture:"wave",pace:"bright"});
@@ -170,7 +191,15 @@ function App(){
   }
   if(kernel.localModel.ready&&bridge?.startGeneration&&bridge?.pollGeneration){
    try{
-    const job=bridge.startGeneration(kernel.localModel.path,v);generationRef.current=job;
+    const context=[
+      "FRAMEWORK PERSONA: "+kernel.persona.tone,
+      "PERSONA RULES: "+kernel.persona.rules.join(" | "),
+      "LOCAL MEMORIES: "+(kernel.memories.slice(-12).join(" | ")||"none"),
+      "RECENT CONVERSATION: "+messages.slice(-10).map(m=>m.role.toUpperCase()+": "+String(m.text).slice(0,240)).join(" || "),
+      "CURRENT USER: "+v,
+      "Respond as Miss Minutes. Return only the required JSON object."
+    ].join("\n");
+    const job=bridge.startGeneration(kernel.localModel.path,context);generationRef.current=job;
     const poll=()=>{
      if(generationRef.current!==job)return;
      let packet="";try{packet=bridge.pollGeneration(job)}catch(e){packet="ERROR\\n"+(e?.message||"poll failed")}
@@ -188,7 +217,8 @@ function App(){
  }
  function evolve(){try{setReaction({emotion:"excited",gesture:"celebrate",pace:"bright"});const proposal=evolutionRef.current.propose({summary:"Expand local evolution capacity and refresh character guidance.",reason:"user-requested self-improvement",patch:[{op:"set",path:["persona","rules"],value:[...new Set([...kernel.persona.rules,"Preserve the faithful retro clock-character visual identity while evolving."])]}]});const result=evolutionRef.current.commit(proposal,{test:candidate=>candidate?.persona?.identityAnchor===IDENTITY.identityAnchor&&Array.isArray(candidate?.persona?.rules)});if(!result.ok)throw new Error(result.error);setKernel(result.kernel);setPanel(null);setMessages(m=>[...m,{role:"assistant",text:"There we go! I made a real framework change, tested it, and preserved a checkpoint first."}])}catch(e){setRuntimeError(e?.message||"Self-improvement failed.")}}
  function rollback(){setReaction({emotion:"warm",gesture:"reset",pace:"calm"});setKernel(old=>windUp(old));setMessages(m=>[...m,{role:"assistant",text:"Winding the clock... back to the last known-good framework."}]);setMode("idle")}
- function addMemory(){const v=prompt("What should I remember locally?");if(v?.trim())setKernel(k=>({...k,memories:[...k.memories,v.trim()]}))}
+ function addMemory(){const v=prompt("What should I remember locally?");if(v?.trim())setKernel(k=>({...k,memories:[...k.memories,v.trim()].slice(-100)}))}
+ function clearConversation(){setMessages([]);try{localStorage.removeItem("miss-minutes-chat-v1")}catch{}}
  const stateText=mode==="thinking"?"Hmm... let me check the timeline.":mode==="speaking"?"There we go!":mode==="listening"?"I'm listening, sugar.":messages.length?"Awaiting your next temporal anomaly.":"Welcome to the TVA, sugar!";
  return <div className="app"><div className="grain"/>
  <header><div><span className="eyebrow">TIME VARIANCE AUTHORITY</span><h1>MISS MINUTES</h1></div><button className="icon" onClick={()=>setPanel("framework")}>⚙</button></header>
@@ -196,7 +226,7 @@ function App(){
  <section className="chat"><div className="messages">{messages.map((m,i)=><div key={i} className={"msg "+m.role}><span>{m.role==="assistant"?"MISS MINUTES":"YOU"}</span><p>{m.text}</p></div>)}<div ref={end}/></div>
  <div className="composer"><button className="mic" onClick={()=>setMode("listening")}>🎙</button><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Speak, sugar..."/><button className="send" onClick={()=>send()}>↗</button></div>
  <div className="tools"><button onClick={()=>setPanel("memory")}>Memory · {kernel.memories.length}</button><button onClick={()=>setPanel("evolution")}>Evolution · G{kernel.evolution.generation}</button><button onClick={()=>setPanel("model")}>Local Brain · {kernel.localModel.ready?"READY":"SETUP"}</button><button onClick={evolve}>Let me improve</button><button className="wind" onClick={rollback}>↶ Wind Up the Clock</button><span className="status"><b/> {mode.toUpperCase()} · {senses.camera?"👁":"—"} {senses.microphone?"🎙":"—"} {senses.shake>.55?"📳":""}</span></div></section></main>
- {panel==="framework"&&<Modal title="TVA FRAMEWORK" close={()=>setPanel(null)}><p className="muted">Local editable behavior, checkpointed before evolution.</p><div className="memory"><b>Generation</b><span>{kernel.evolution.generation}</span></div><div className="memory"><b>Snapshots</b><span>{kernel.evolution.snapshots.length}</span></div><div className="memory"><b>Capabilities</b><span>{registryRef.current.list().length}</span></div><div className="memory"><b>Idle evolution</b><span>{kernel.evolution.idle?.enabled?"ACTIVE":"OFF"}</span></div><div className="memory"><b>Local brain</b><span>{kernel.localModel.ready?"READY":"NOT LOADED"}</span></div><button className="primary" onClick={evolve}>Self-improve</button><button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}
+ {panel==="framework"&&<Modal title="TVA FRAMEWORK" close={()=>setPanel(null)}><p className="muted">Local editable behavior, checkpointed before evolution.</p><div className="memory"><b>Generation</b><span>{kernel.evolution.generation}</span></div><div className="memory"><b>Snapshots</b><span>{kernel.evolution.snapshots.length}</span></div><div className="memory"><b>Capabilities</b><span>{registryRef.current.list().length}</span></div><div className="memory"><b>Idle evolution</b><span>{kernel.evolution.idle?.enabled?"ACTIVE":"OFF"}</span></div><div className="memory"><b>Local brain</b><span>{kernel.localModel.ready?"READY":"NOT LOADED"}</span></div><button className="primary" onClick={evolve}>Self-improve</button><button className="primary" onClick={clearConversation}>Clear conversation</button><button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}
  {panel==="model"&&<Modal title="LOCAL BRAIN" close={()=>setPanel(null)}><p className="muted">Miss Minutes now has a real pre-built base brain path. The default brain is Qwen2.5-0.5B-Instruct Q4_K_M, an Apache-2.0 GGUF. It is downloaded once into app-private storage, then llama.cpp runs it locally on the device.</p><div className="memory"><b>Base brain</b><span>{kernel.localModel.ready?"READY":kernel.localModel.status==="downloading"?`${kernel.localModel.progress||0}%`:"NOT INSTALLED"}</span></div><div className="memory"><b>Model</b><span>{kernel.localModel.name}</span></div><button className="primary" disabled={kernel.localModel.status==="downloading"} onClick={()=>{globalThis.MissMinutesNative?.installBaseModel?.()}}>{kernel.localModel.status==="downloading"?"Downloading…":"Install Base Brain (~491 MB)"}</button><button className="primary" onClick={()=>{globalThis.MissMinutesNative?.pickModel?.()}}>Select another GGUF</button><p className="muted">The base model is deliberately separate from our future Miss Minutes fine-tune. That later model becomes ours; this one is the starting brain.</p></Modal>}
  {panel==="memory"&&<Modal title="CHRONAL MEMORY" close={()=>setPanel(null)}><p className="muted">Explicitly stored facts remain on this device.</p>{kernel.memories.map((m,i)=><div className="memory" key={i}>{m}<button onClick={()=>setKernel(k=>({...k,memories:k.memories.filter((_,j)=>j!==i)}))}>×</button></div>)}<button className="primary" onClick={addMemory}>+ Add memory</button></Modal>}
  {panel==="evolution"&&<Modal title="EVOLUTION LEDGER" close={()=>setPanel(null)}><p className="muted">Changes made by the self-improvement layer.</p>{kernel.evolution.ledger.map(x=><div className="ledger" key={x.id}><b>G{x.generation}</b><span>{new Date(x.at).toLocaleString()}</span><p>{x.summary}</p></div>)}{!kernel.evolution.ledger.length&&<p className="muted">No evolutions yet.</p>}<button className="wind primary" onClick={rollback}>↶ Wind Up the Clock</button></Modal>}</div>
