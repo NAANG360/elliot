@@ -30,6 +30,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.time.Instant
+import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import org.json.JSONObject
 
 class MainActivity : Activity() {
@@ -212,6 +215,9 @@ private class SensorBridge(private val manager: SensorManager, private val activ
 }
 
 class FrameworkBridge(private val root: File, private val activity: MainActivity) {
+    private data class SearchJob(@Volatile var status: String = "RUNNING", @Volatile var body: String = "")
+    private val searchJobs = ConcurrentHashMap<String, SearchJob>()
+
     companion object {
         private const val BASE_MODEL_URL = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/df5bf01389a39c743ab467d734bf501681e041c5/qwen2.5-0.5b-instruct-q4_k_m.gguf?download=true"
         private const val BASE_MODEL_NAME = "qwen2.5-0.5b-instruct-q4_k_m.gguf"
@@ -226,6 +232,52 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
 
     @JavascriptInterface
     fun startSensors(): Boolean = true
+    @JavascriptInterface
+    fun startWebSearch(query: String): String {
+        val id = "search-" + System.currentTimeMillis() + "-" + AtomicInteger().incrementAndGet()
+        val job = SearchJob()
+        searchJobs[id] = job
+        Thread {
+            try {
+                val encoded = URLEncoder.encode(query.take(240), "UTF-8")
+                val c = (URL("https://html.duckduckgo.com/html/?q=" + encoded).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 10000
+                    instanceFollowRedirects = true
+                    requestMethod = "GET"
+                    setRequestProperty("User-Agent", "MissMinutes/0.7.6")
+                    setRequestProperty("Accept", "text/html")
+                }
+                val html = try {
+                    if (c.responseCode !in 200..299) error("Search HTTP " + c.responseCode)
+                    c.inputStream.bufferedReader().use { it.readText() }
+                } finally { c.disconnect() }
+                val results = org.json.JSONArray()
+                val pattern = Regex("""<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>""", RegexOption.IGNORE_CASE)
+                for (m in pattern.findAll(html).take(6)) {
+                    val title = android.text.Html.fromHtml(m.groupValues[2], android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
+                    val link = android.text.Html.fromHtml(m.groupValues[1], android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
+                    if (title.isBlank() || link.isBlank()) continue
+                    results.put(JSONObject().apply { put("title", title); put("url", link) })
+                }
+                job.body = results.toString()
+                job.status = "DONE"
+            } catch (t: Throwable) {
+                job.body = t.message ?: "Internet search failed"
+                job.status = "ERROR"
+            }
+        }.start()
+        return id
+    }
+
+    @JavascriptInterface
+    fun pollWebSearch(jobId: String): String {
+        val job = searchJobs[jobId] ?: return "ERROR\nUnknown search job"
+        val result = job.status + if (job.status != "RUNNING") "\n" + job.body else ""
+        if (job.status != "RUNNING") searchJobs.remove(jobId)
+        return result
+    }
+
 
     @JavascriptInterface
     fun frameworkPath(): String = root.absolutePath
