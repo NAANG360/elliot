@@ -290,6 +290,18 @@ class FrameworkBridge(private val root: File, private val activity: MainActivity
 
 
     @JavascriptInterface
+    fun openUrl(url: String): Boolean {
+        return try {
+            val parsed = Uri.parse(url)
+            if (parsed.scheme != "http" && parsed.scheme != "https") return false
+            activity.startActivity(Intent(Intent.ACTION_VIEW, parsed))
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    @JavascriptInterface
     fun frameworkPath(): String = root.absolutePath
 
     @JavascriptInterface

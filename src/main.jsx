@@ -8,8 +8,9 @@ import {IdleAutonomy} from "./self/IdleAutonomy.js";
 import {ChronalMemory} from "./self/ChronalMemory.js";
 import {CapabilityLab} from "./self/CapabilityLab.js";
 import {ModelEvolution} from "./self/ModelEvolution.js";
+import {ActionRouter} from "./self/ActionRouter.js";
 
-const STATE="miss-minutes-kernel-v11";
+const STATE="miss-minutes-kernel-v12";
 const uid=()=>globalThis.crypto?.randomUUID?.()||("chronal-"+Date.now()+"-"+Math.random().toString(16).slice(2));
 const IDENTITY={name:"Miss Minutes",role:"your local chronal companion",identityAnchor:"I am Miss Minutes. This is my name and role inside this application.",style:"faithful retro TVA clock mascot; theatrical, warm, mischievous, precise, visibly artificial",boundaries:"Fan-made local assistant; not official Marvel/TVA software."};
 const clone=(value)=>{
@@ -39,7 +40,7 @@ function hydrateKernel(raw){
 function load(){try{
  const current=localStorage.getItem(STATE);
  if(current){const parsed=hydrateKernel(JSON.parse(current));save(parsed);return parsed}
- const legacy=localStorage.getItem("miss-minutes-kernel-v10")||localStorage.getItem("miss-minutes-kernel-v9")||localStorage.getItem("miss-minutes-kernel-v8");
+ const legacy=localStorage.getItem("miss-minutes-kernel-v11")||localStorage.getItem("miss-minutes-kernel-v10")||localStorage.getItem("miss-minutes-kernel-v9")||localStorage.getItem("miss-minutes-kernel-v8");
  if(legacy){const migrated=hydrateKernel(JSON.parse(legacy));migrated.evolution.snapshots=[];migrated.evolution.lastGood=null;localStorage.setItem(STATE,JSON.stringify(migrated));return migrated}
  return hydrateKernel(DEFAULT_KERNEL)
 }catch{return hydrateKernel(DEFAULT_KERNEL)}}
@@ -65,9 +66,9 @@ function parseModelReply(raw){
  const text=String(raw||"").trim();
  try{
   const parsed=JSON.parse(text.replace(/^\`\`\`json\s*|^\`\`\`|\`\`\`$/g,"").trim());
-  if(parsed&&typeof parsed.text==="string")return parsed;
+  if(parsed&&typeof parsed.text==="string")return {...parsed,actions:Array.isArray(parsed.actions)?parsed.actions:[]};
  }catch{}
- return {text,emotion:"neutral",gesture:"idle",pace:"normal"};
+ return {text,emotion:"neutral",gesture:"idle",pace:"normal",actions:[]};
 }
 function demoBrain(text,kernel){
  const q=text.toLowerCase();
@@ -95,6 +96,7 @@ function App(){
  const memoryRef=useRef(null); if(!memoryRef.current)memoryRef.current=new ChronalMemory();
  const capabilityLabRef=useRef(null); if(!capabilityLabRef.current)capabilityLabRef.current=new CapabilityLab();
  const modelEvolutionRef=useRef(null); if(!modelEvolutionRef.current)modelEvolutionRef.current=new ModelEvolution();
+ const actionRouterRef=useRef(null); if(!actionRouterRef.current)actionRouterRef.current=new ActionRouter({bridge:globalThis.MissMinutesNative,memory:memoryRef.current,onCapability:goal=>capabilityLabRef.current.addGoal(goal,"model"),onSelfImprove:()=>{evolve();return "Self-improvement was started."},onMemoryChange:()=>setKernel(k=>({...k,memories:memoryRef.current.recall("",100).split("\\n").filter(Boolean).slice(-100)}))});
  const [pendingCapability,setPendingCapability]=useState(()=>capabilityLabRef.current.authorizationPending()[0]||null);
  const registryRef=useRef(null);
  const evolutionRef=useRef(null);
@@ -169,13 +171,34 @@ function App(){
  useEffect(()=>{end.current?.scrollIntoView({behavior:"smooth"})},[messages]);
  useEffect(()=>()=>{try{if(generationRef.current)globalThis.MissMinutesNative?.cancelGeneration?.(generationRef.current)}catch{};generationRef.current=null},[]);
  const speak=t=>{if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.02;u.pitch=1.08;u.onstart=()=>setMode("speaking");u.onend=()=>setMode("idle");window.speechSynthesis.speak(u)};
- function send(v=input){
+ async function send(v=input){
   v=v.trim();if(!v)return;
   setInput("");
   setMessages(m=>[...m,{role:"user",text:v}]);setMode("thinking");
   const bridge=globalThis.MissMinutesNative;
   setReaction({emotion:"curious",gesture:"think",pace:"normal"});
   const q=v.toLowerCase(); memoryRef.current.observe(v,"user",.35);
+  const searchMatch=v.match(/^(?:search|look up|find)\\s+(?:for\\s+)?(.+)/i);
+  if(searchMatch){
+   try{
+    const results=await actionRouterRef.current.run([{type:"web_search",query:searchMatch[1]}]);
+    const r=results[0];
+    const items=Array.isArray(r?.result)?r.result:[];
+    const text=items.length?items.slice(0,5).map((x,i)=>(i+1)+". "+x.title+"\\n"+x.url).join("\\n\\n"):"I searched the web, sugar, but nothing useful came back.";
+    setMessages(m=>[...m,{role:"assistant",text}]);setMode("idle");setReaction({emotion:"curious",gesture:"think",pace:"normal"});return;
+   }catch(e){setMessages(m=>[...m,{role:"assistant",text:"The web search tripped over a temporal anomaly: "+String(e?.message||e)}]);setMode("idle");return}
+  }
+  const openMatch=v.match(/^(?:open|go to|visit)\\s+(https?:\\/\\/\\S+)/i);
+  if(openMatch){
+   const results=await actionRouterRef.current.run([{type:"open_url",url:openMatch[1]}]);
+   setMessages(m=>[...m,{role:"assistant",text:results[0]?.result||"I couldn't open that address."}]);setMode("idle");return;
+  }
+  if(/^(?:enable|turn on|activate)\\s+(?:the\\s+)?camera$/i.test(v)){
+   const r=await actionRouterRef.current.run([{type:"request_camera"}]);setMessages(m=>[...m,{role:"assistant",text:r[0]?.result||"Camera permission requested."}]);setMode("idle");return;
+  }
+  if(/^(?:enable|turn on|activate)\\s+(?:the\\s+)?microphone$/i.test(v)){
+   const r=await actionRouterRef.current.run([{type:"request_microphone"}]);setMessages(m=>[...m,{role:"assistant",text:r[0]?.result||"Microphone permission requested."}]);setMode("idle");return;
+  }
   if(q.startsWith("remember ")||q.startsWith("remember:")){
    const fact=v.replace(/^remember\s*:?\s*/i,"").trim();
    if(fact){memoryRef.current.remember(fact,.98);setKernel(k=>({...k,memories:[...k.memories,fact].slice(-100)}));setMessages(m=>[...m,{role:"assistant",text:"Consider it tucked away in my local memory, sugar."}]);setMode("idle");return}
@@ -206,7 +229,7 @@ function App(){
       "ASSOCIATIVE MEMORY: "+memoryRef.current.recall(v,12),
       "RECENT CONVERSATION: "+messages.slice(-10).map(m=>m.role.toUpperCase()+": "+String(m.text).slice(0,240)).join(" || "),
       "CURRENT USER: "+v,
-      "If the request needs a capability I do not currently have, also include capabilityGoal as a concise string describing the missing capability. Return only JSON with text, emotion, gesture, pace, and optional capabilityGoal."
+      "Do not merely describe an action. If the user asks you to do something that is available, return an actions array using only web_search, open_url, remember, request_camera, request_microphone, capability_goal, or self_improve. Never claim an action succeeded unless the app can execute it. Return only JSON with text, emotion, gesture, pace, actions, and optional capabilityGoal."
     ].join("\n");
     const job=bridge.startGeneration(kernel.localModel.path,context);generationRef.current=job;
     const poll=()=>{
@@ -217,6 +240,13 @@ function App(){
      generationRef.current=null;
      const reply=status==="DONE"?parseModelReply(body):{text:status==="ERROR"?body:demoBrain(v,kernel),emotion:"concerned",gesture:"reset",pace:"normal"};
      setReaction({emotion:reply.emotion||"neutral",gesture:reply.gesture||"idle",pace:reply.pace||"normal"});
+     if(reply.actions?.length){
+      try{
+       const actionResults=await actionRouterRef.current.run(reply.actions);
+       const completed=actionResults.filter(x=>x.status==="done"||x.status==="queued"||x.status==="awaiting-user").map(x=>x.result).filter(Boolean);
+       if(completed.length)reply.text=(reply.text?reply.text+" ":"")+completed.join(" ");
+      }catch(e){reply.text=(reply.text?reply.text+" ":"")+"I couldn't complete one of those actions: "+String(e?.message||e)}
+     }
      memoryRef.current.observe(reply.text,"assistant",.25); memoryRef.current.consolidate(); if(reply.capabilityGoal)capabilityLabRef.current.addGoal(reply.capabilityGoal,"model"); setMessages(m=>[...m,{role:"assistant",text:reply.text}]);setMode("idle");speak(reply.text);
     };
     setTimeout(poll,80);return;
