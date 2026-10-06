@@ -18,6 +18,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.security.MessageDigest
+import org.json.JSONObject
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
@@ -29,6 +30,8 @@ class MainActivity : Activity() {
  private lateinit var memory:NativeChronalMemory
  private lateinit var voice:VoiceBackend
  private val handler=Handler(Looper.getMainLooper())
+ private var generationToken=0L
+ private var voiceEnabled=true
 
  override fun onCreate(state:Bundle?){super.onCreate(state);brain=FrameworkBridge(filesDir.resolve("framework"),this);memory=NativeChronalMemory(this);voice=VoiceBackend(this);buildUi();requestPermissionsIfNeeded()}
  private fun buildUi(){
@@ -37,16 +40,41 @@ class MainActivity : Activity() {
   character=NativeMissMinutesView(this);root.addView(character,LinearLayout.LayoutParams(-1,0,1f))
   scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(22,14,9));setPadding(12,8,12,8)};chat=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};scroll.addView(chat);root.addView(scroll,LinearLayout.LayoutParams(-1,0,.72f))
   val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL};input=EditText(this).apply{hint="Speak, sugar...";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(false);setMaxLines(3)};row.addView(input,LinearLayout.LayoutParams(0,-2,1f));row.addView(Button(this).apply{text="↗";setOnClickListener{send()}},LinearLayout.LayoutParams(64,-2));root.addView(row)
-  val tools=LinearLayout(this).apply{gravity=Gravity.CENTER};listOf("Memory","Brain","Wind Up").forEach{label->tools.addView(Button(this).apply{text=label;setOnClickListener{when(label){"Memory"->showMemory();"Brain"->installBrain();"Wind Up"->windUp()}}})};root.addView(tools);setContentView(root)
+  val tools=LinearLayout(this).apply{gravity=Gravity.CENTER}
+  listOf("Memory","Brain","Wind Up").forEach{label->tools.addView(Button(this).apply{text=label;setOnClickListener{when(label){"Memory"->showMemory();"Brain"->installBrain();"Wind Up"->windUp()}}})}
+  tools.addView(Button(this).apply{text="VOICE ON";setOnClickListener{voiceEnabled=!voiceEnabled;if(!voiceEnabled){voice.stop();character.speaking=false};text=if(voiceEnabled)"VOICE ON" else "VOICE OFF"}})
+  root.addView(tools);setContentView(root)
   addMessage("MISS MINUTES","Well hello there, sugar! The native chronal core is awake. No WebView required.")
  }
  private fun addMessage(who:String,message:String){chat.addView(TextView(this).apply{text=who+"\n"+message;setTextColor(if(who=="MISS MINUTES")Color.rgb(255,220,175)else Color.WHITE);textSize=15f;setPadding(4,8,4,12)});scroll.post{scroll.fullScroll(View.FOCUS_DOWN)}}
  private fun send(){
-  val text=input.text.toString().trim();if(text.isBlank())return;input.setText("");addMessage("YOU",text);memory.remember(text,"conversation",.35);character.emotion="curious";character.speaking=true;val q=text.lowercase()
-  when{q.startsWith("remember ")->{memory.remember(text.substringAfter("remember ").trim(),"explicit",.98);reply("I've tucked that away in chronal memory, sugar.")};q.contains("what do you remember")->reply(memory.recall("",12).joinToString("\n• ",prefix="Here's what survived the timeline:\n• "));q.startsWith("search ")->search(text.substringAfter("search ").trim());q.startsWith("open http://")||q.startsWith("open https://")->{brain.openUrl(text.substringAfter(" ").trim());reply("Opened it. The external browser stays outside my process.")};q.contains("time")->reply("The local time is "+java.text.SimpleDateFormat("h:mm:ss a").format(java.util.Date())+".");else->generate(text)}
+  val text=input.text.toString().trim();if(text.isBlank())return
+  input.setText("")
+  generationToken++
+  voice.stop()
+  character.speaking=true
+  addMessage("YOU",text)
+  memory.remember(text,"conversation",.35)
+  character.emotion="curious"
+  val token=generationToken
+  val q=text.lowercase()
+  when{q.startsWith("remember ")->{memory.remember(text.substringAfter("remember ").trim(),"explicit",.98);reply("I've tucked that away in chronal memory, sugar.")};q.contains("what do you remember")->reply(memory.recall("",12).joinToString("\n• ",prefix="Here's what survived the timeline:\n• "));q.startsWith("search ")->search(text.substringAfter("search ").trim());q.startsWith("open http://")||q.startsWith("open https://")->{brain.openUrl(text.substringAfter(" ").trim());reply("Opened it. The external browser stays outside my process.")};q.contains("time")->reply("The local time is "+java.text.SimpleDateFormat("h:mm:ss a").format(java.util.Date())+".");else->generate(text,token)}
  }
- private fun generate(text:String){val path=brain.modelPath();if(path.isBlank()){reply("My local brain slot is empty, sugar. Tap Brain to install the starter brain first.");return};thread{val prompt="You are Miss Minutes, a cheerful theatrical retro TVA clock companion. Be concise, warm, mischievous and precise. Never claim an action happened unless it did. USER: "+text;val result=NativeBrain.generate(path,prompt);handler.post{reply(result)}}}
- private fun reply(text:String){handler.post{character.speaking=true;addMessage("MISS MINUTES",text);voice.speak(text);handler.postDelayed({character.speaking=false;character.emotion="warm"},900)}}
+ private fun generate(text:String, token:Long){val path=brain.modelPath();if(path.isBlank()){reply("My local brain slot is empty, sugar. Tap Brain to install the starter brain first.");return};thread{val prompt="You are Miss Minutes, a cheerful theatrical retro TVA clock companion. Be concise, warm, mischievous and precise. Never claim an action happened unless it did. USER: "+text;val result=NativeBrain.generate(path,prompt);handler.post{if(token==generationToken)reply(result)}}
+ private fun cleanModelReply(raw:String):String{
+  var text=raw.trim()
+  try{
+   val start=raw.indexOf('{');val end=raw.lastIndexOf('}')
+   if(start>=0&&end>start){val candidate=raw.substring(start,end+1);text=JSONObject(candidate).optString("text",text)}
+  }catch(_:Throwable){}
+  if(text.contains("Assistant:"))text=text.substringAfterLast("Assistant:").trim()
+  text=text.replace(Regex("(?im)^User:\\s*.*$"),"").replace(Regex("(?im)^Assistant:\\s*"),"")
+  val seen=HashSet<String>()
+  text=text.lines().map{it.trimEnd()}.filter{it.isNotBlank()&&seen.add(it.trim().lowercase())}.joinToString("\n").trim()
+  if(text.isBlank())text="I'm sorry, sugar. My chronal response came back empty."
+  return text.take(1200)
+ }
+ private fun reply(rawText:String){handler.post{val text=cleanModelReply(rawText);character.speaking=voiceEnabled;addMessage("MISS MINUTES",text);if(voiceEnabled)voice.speak(text.take(700));handler.postDelayed({character.speaking=false;character.emotion="warm"},maxOf(900,text.length*35))}}
  private fun search(query:String){thread{val r=brain.search(query);handler.post{reply(if(r.isBlank())"The timeline returned no useful results." else "I found:\n"+r)}}}
  private fun showMemory(){reply("Chronal memory currently contains "+memory.count()+" durable traces. It is stored natively on-device rather than in browser storage.")}
  private fun installBrain(){if(brain.modelPath().isNotBlank()){reply("My local brain is already installed. I won't silently replace it with another model.");return};reply("I'm fetching the starter brain once, then all future adaptation stays attached to that installed brain.");thread{brain.installBaseModel{m->handler.post{addMessage("BRAIN",m)}}}}
