@@ -74,7 +74,7 @@ class MainActivity : Activity() {
   if(text.isBlank())text="I'm sorry, sugar. My chronal response came back empty."
   return text.take(1200)
  }
- private fun reply(rawText:String){handler.post{val text=cleanModelReply(rawText);character.speaking=voiceEnabled;addMessage("MISS MINUTES",text);if(voiceEnabled)voice.speak(text.take(700));handler.postDelayed({character.speaking=false;character.emotion="warm"},maxOf(900,text.length*35))}}
+ private fun reply(rawText:String){handler.post{val text=cleanModelReply(rawText);character.speaking=voiceEnabled;addMessage("MISS MINUTES",text);if(voiceEnabled)voice.speak(text.take(700));handler.postDelayed({character.speaking=false;character.emotion="warm"},maxOf(900L,text.length*35L))}}
  private fun search(query:String){thread{val r=brain.search(query);handler.post{reply(if(r.isBlank())"The timeline returned no useful results." else "I found:\n"+r)}}}
  private fun showMemory(){reply("Chronal memory currently contains "+memory.count()+" durable traces. It is stored natively on-device rather than in browser storage.")}
  private fun installBrain(){if(brain.modelPath().isNotBlank()){reply("My local brain is already installed. I won't silently replace it with another model.");return};reply("I'm fetching the starter brain once, then all future adaptation stays attached to that installed brain.");thread{brain.installBaseModel{m->handler.post{addMessage("BRAIN",m)}}}}
