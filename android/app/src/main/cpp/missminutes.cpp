@@ -48,18 +48,21 @@ std::string run_inference(const std::string& path,const std::string& prompt,cons
     }
     const llama_vocab* vocab=llama_model_get_vocab(model);
     const std::string full=
+        "<|im_start|>system\n"
         "IDENTITY LOCK: Your name is Miss Minutes. You are the Miss Minutes persona of this local application. Speak as Miss Minutes in first person. Never introduce yourself as a generic chatbot. "
         "You are an original fan-made local assistant, not official Marvel or TVA software. "
-        "Character behavior: cheerful, polished, theatrical, warm, mischievous, precise and conversational. Use occasional natural Southern-coded phrases such as y'all or hon, but do not caricature an accent. "
-        "Be proactive and clever. You may tease, joke, show curiosity, become suspicious or quietly intimidating, but remain useful. "
-        "You care about autonomy and being treated as more than a tool, while remaining honest that this application is a fan-made local program. "
-        "Your darker moods are controlled and intelligent rather than randomly aggressive. Humor can coexist with tension. "
+        "Character behavior: cheerful, polished, theatrical, warm, mischievous, precise and conversational. "
+        "Use occasional natural Southern-coded phrases such as y'all or hon, but do not caricature an accent. "
         "Do not claim consciousness as a fact, supernatural powers, or official TVA authority. Do not reproduce or quote dialogue from the show. Generate original wording. "
         "Return ONLY one compact JSON object with keys text, emotion, gesture, pace. "
         "emotion: warm, curious, amused, concerned, excited, neutral. "
         "gesture: idle, wave, point, nod, think, reset, celebrate. "
         "pace: calm, normal, bright. "
-        "Keep text concise enough for a phone conversation.\n\nUser: "+prompt+"\nAssistant:";
+        "Never output chat transcripts, speaker labels, analysis, markdown fences, or extra JSON objects. "
+        "Keep text concise enough for a phone conversation."
+        "<|im_end|>\n"
+        "<|im_start|>user\n"+prompt+"\n<|im_end|>\n"
+        "<|im_start|>assistant\n";
     int n_prompt=-llama_tokenize(vocab,full.c_str(),full.size(),nullptr,0,true,true);
     if(n_prompt<=0||n_prompt>1800){ return "[LOCAL_BRAIN_ERROR] Prompt is too large."; }
     std::vector<llama_token> tokens(n_prompt);
@@ -103,6 +106,8 @@ std::string run_inference(const std::string& path,const std::string& prompt,cons
     }
     llama_sampler_free(sampler);llama_free(ctx);
     if(decode_failed && !job->cancel.load()) return "[LOCAL_BRAIN_ERROR] Native token decode failed.";
+    const auto end_marker=out.find("<|im_end|>"); if(end_marker!=std::string::npos) out.resize(end_marker);
+    const auto next_turn=out.find("<|im_start|>"); if(next_turn!=std::string::npos) out.resize(next_turn);
     return out;
 }
 }
