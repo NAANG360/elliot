@@ -10,16 +10,16 @@ That privacy statement describes the project's intended distribution boundary; i
 
 This project is intentionally a private fan implementation. It is not an official Marvel, Loki, TVA, or Disney product.
 
-## 0.8.0 native direction
+## 0.8.1 native core expansion
 
 The Android application is now moving off WebView:
 
 - **Native Android UI:** the APK renders Miss Minutes through a Kotlin View instead of a WebView.
-- **Native chronal memory:** durable traces are stored locally through Android storage rather than browser localStorage.
+- **Native chronal memory:** durable traces are stored as an on-device append-only archive with typed memories, confidence/importance, relevance scoring and a mutation ledger; active prompts retrieve only what matters.
 - **Native local brain:** llama.cpp remains the local inference layer and the installed GGUF remains the single base brain.
 - **No silent model ladder:** Miss Minutes does not autonomously download replacement models.
 - **Swappable voice boundary:** speech is isolated behind VoiceBackend, so an authorized/licensed voice implementation can be plugged in without changing the brain.
-- **Death renderer:** the native character renderer has the foundation for the requested glitch -> ASCII -> terminal-style failure presentation. It is an application effect, not a real operating-system crash.
+- **Death renderer:** the native character renderer now has a staged corruption -> terminal text -> ASCII clock -> custom fatal-screen state machine. It is an application effect, not a real operating-system crash.
 
 The old React/Vite surface remains in the repository as a development/reference environment. **It is no longer the Android application's runtime UI.**
 
@@ -34,13 +34,19 @@ The old React/Vite surface remains in the repository as a development/reference 
 - **Native Android core:** UI, storage, permissions, sensors, speech and local inference are moving into native Android/Kotlin/C++.
 - **Effectively unbounded memory:** long-term memory is treated as an external persistent store with retrieval/compression, rather than pretending a tiny local model can hold an infinite token context at once.
 
+## Creator-control / ownership boundary
+
+The project's rule is simple: **if I create the invention, the private project stays mine unless I deliberately choose otherwise.** In the same spirit as the project's tongue-in-cheek “only I get to be the Doctor” motto, private original source, checkpoints, datasets, experiments and unreleased artifacts are not offered to other people by default.
+
+That does **not** mean the author claims ownership of third-party phones, operating systems, characters, trademarks, recordings, libraries, datasets or other property. A device someone else owns remains theirs; third-party intellectual property remains subject to its own rights and licences. This repository's privacy boundary is a restriction on this project's distribution, not a claim over other people's property.
+
 ## Voice
 
 The voice system is deliberately a **backend interface**, not a hard-coded actor impersonation system.
 
 The target character direction is Miss Minutes: bright, theatrical, mischievous, precise and warm, with a retro-cartoon cadence. The application can use Android/system TTS or another voice implementation whose model and voice rights permit the intended use.
 
-The project does **not** ship a Tara Strong voice clone or claim authorization to reproduce her recognizable performance. If the project ever obtains explicit authorization/licensing for a particular performance or voice model, that authorized backend can be connected without redesigning the rest of the application.
+The project does **not** currently ship or train a Tara Strong voice clone. The native voice boundary is deliberately ready for a properly authorized/licensed voice backend, so an authorized model could be connected later without redesigning the brain, memory, actions or renderer. I am not treating a private repository as automatic permission to reproduce a recognizable performer's voice.
 
 India's Copyright Act gives performers specific rights over recording/reproduction/communication of performances under section 38A, while section 39 contains a private-use exception for certain sound/visual recordings. Those provisions do not amount to a blanket licence for every form of AI voice cloning or redistribution, so this README intentionally does not make that claim. See the official Copyright Office text before changing the project's distribution or voice policy.
 
@@ -62,6 +68,7 @@ Miss Minutes gets room to evolve, while the user retains control of the immutabl
 **Private project. Private artifacts. No public distribution by default.**
 
 See:
+- docs/PROJECT_BOUNDARIES.md — privacy, creator-control and third-party ownership boundary
 - DESIGN_REFERENCE.md — character and visual invariants
 - docs/NATIVE_ARCHITECTURE.md — native/infinite-memory architecture
 - docs/VOICE_ARCHITECTURE.md — swappable speech architecture and rights boundary
