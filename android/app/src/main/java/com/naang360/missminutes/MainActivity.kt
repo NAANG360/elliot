@@ -1,512 +1,66 @@
 package com.naang360.missminutes
 
-import android.app.Activity
 import android.Manifest
-import android.content.pm.PackageManager
-import android.webkit.PermissionRequest
+import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
-import android.os.SystemClock
-import android.provider.OpenableColumns
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
-import kotlin.math.sqrt
-import kotlin.math.abs
-import android.webkit.ConsoleMessage
-import android.webkit.JavascriptInterface
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebView
-import androidx.webkit.WebViewAssetLoader
-import androidx.webkit.WebViewClientCompat
+import android.os.Handler
+import android.os.Looper
+import android.view.Gravity
+import android.view.View
+import android.widget.*
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
-import java.time.Instant
 import java.net.URLEncoder
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
-import org.json.JSONObject
+import java.security.MessageDigest
+import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
-    companion object {
-        init {
-            try { System.loadLibrary("missminutes") } catch (_: UnsatisfiedLinkError) {}
-        }
-    }
+ private lateinit var character:NativeMissMinutesView
+ private lateinit var chat:LinearLayout
+ private lateinit var input:EditText
+ private lateinit var scroll:ScrollView
+ private lateinit var brain:FrameworkBridge
+ private lateinit var memory:NativeChronalMemory
+ private lateinit var voice:VoiceBackend
+ private val handler=Handler(Looper.getMainLooper())
 
-    private lateinit var web: WebView
-    private lateinit var framework: FrameworkBridge
-    private val modelRequest = 7412
-    private val mediaPermissionRequest = 9001
-    private var webLoaded = false
-    private lateinit var sensorManager: SensorManager
-    private var sensorBridge: SensorBridge? = null
-
-    override fun onCreate(state: Bundle?) {
-        super.onCreate(state)
-        framework = FrameworkBridge(filesDir.resolve("framework"), this)
-        web = WebView(this).apply {
-            setBackgroundColor(Color.rgb(12, 8, 4))
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.allowFileAccess = false
-            settings.allowContentAccess = false
-            settings.databaseEnabled = true
-            webViewClient = AppAssetClient(assetLoader)
-            webChromeClient = object : WebChromeClient() {
-                override fun onPermissionRequest(request: PermissionRequest) {
-                    runOnUiThread {
-                        val granted = request.resources.filter { resource ->
-                            when (resource) {
-                                PermissionRequest.RESOURCE_VIDEO_CAPTURE -> checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-                                PermissionRequest.RESOURCE_AUDIO_CAPTURE -> checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                                else -> false
-                            }
-                        }.toTypedArray()
-                        if (granted.isNotEmpty()) request.grant(granted) else request.deny()
-                    }
-                }
-                override fun onConsoleMessage(message: ConsoleMessage): Boolean {
-                    android.util.Log.e("MissMinutes", "JS: ${message.message()} @${message.sourceId()}:${message.lineNumber()}")
-                    return true
-                }
-            }
-            addJavascriptInterface(framework, "MissMinutesNative")
-        }
-        setContentView(web)
-        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
-        sensorBridge = SensorBridge(sensorManager, this)
-        ensureMediaPermissions()
-    }
-
-    private fun ensureMediaPermissions() {
-        loadWebApp()
-    }
-
-    @JavascriptInterface
-    fun hasMediaPermission(kind: String): Boolean {
-        val permission = if (kind.equals("camera", true)) Manifest.permission.CAMERA else Manifest.permission.RECORD_AUDIO
-        return checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
-    }
-
-    @JavascriptInterface
-    fun requestMediaAccess(kind: String): Boolean {
-        val permission = if (kind.equals("camera", true)) Manifest.permission.CAMERA else Manifest.permission.RECORD_AUDIO
-        if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) return true
-        requestPermissions(arrayOf(permission), mediaPermissionRequest)
-        return false
-    }
-
-    private fun loadWebApp() {
-        if (webLoaded) return
-        webLoaded = true
-        web.loadUrl("https://appassets.androidplatform.net/assets/web/index.html")
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == mediaPermissionRequest) loadWebApp()
-    }
-
-    private val assetLoader: WebViewAssetLoader by lazy {
-        WebViewAssetLoader.Builder()
-            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
-            .build()
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != modelRequest || resultCode != RESULT_OK) return
-        val uri = data?.data ?: return
-        val file = framework.importModel(uri) ?: return
-        web.post {
-            val name = file.name.replace("\\", "\\\\").replace("'", "\\'")
-            val path = file.absolutePath.replace("\\", "\\\\").replace("'", "\\'")
-            web.evaluateJavascript(
-                "window.dispatchEvent(new CustomEvent('miss-model-event',{detail:{name:'$name',path:'$path',ready:true,status:'ready',progress:100,source:'Imported GGUF'}}))",
-                null
-            )
-        }
-    }
-
-    fun dispatchModelEvent(script: String) {
-        web.post { web.evaluateJavascript(script, null) }
-    }
-
-    fun openModelPicker() {
-        startActivityForResult(
-            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "application/octet-stream"
-            },
-            modelRequest
-        )
-    }
-
-    override fun onResume() {
-        super.onResume()
-        sensorBridge?.start()
-    }
-
-    override fun onPause() {
-        sensorBridge?.stop()
-        super.onPause()
-    }
-
-    override fun onDestroy() {
-        sensorBridge?.stop()
-        framework.shutdown()
-        web.destroy()
-        super.onDestroy()
-    }
+ override fun onCreate(state:Bundle?){super.onCreate(state);brain=FrameworkBridge(filesDir.resolve("framework"),this);memory=NativeChronalMemory(this);voice=VoiceBackend(this);buildUi();requestPermissionsIfNeeded()}
+ private fun buildUi(){
+  val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(Color.rgb(12,8,4));setPadding(18,18,18,12)}
+  root.addView(TextView(this).apply{text="TIME VARIANCE AUTHORITY\nMISS MINUTES";setTextColor(Color.rgb(255,190,105));textSize=20f;gravity=Gravity.CENTER;setPadding(0,4,0,10)},LinearLayout.LayoutParams(-1,-2))
+  character=NativeMissMinutesView(this);root.addView(character,LinearLayout.LayoutParams(-1,0,1f))
+  scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(22,14,9));setPadding(12,8,12,8)};chat=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};scroll.addView(chat);root.addView(scroll,LinearLayout.LayoutParams(-1,0,.72f))
+  val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL};input=EditText(this).apply{hint="Speak, sugar...";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(false);setMaxLines(3)};row.addView(input,LinearLayout.LayoutParams(0,-2,1f));row.addView(Button(this).apply{text="↗";setOnClickListener{send()}},LinearLayout.LayoutParams(64,-2));root.addView(row)
+  val tools=LinearLayout(this).apply{gravity=Gravity.CENTER};listOf("Memory","Brain","Wind Up").forEach{label->tools.addView(Button(this).apply{text=label;setOnClickListener{when(label){"Memory"->showMemory();"Brain"->installBrain();"Wind Up"->windUp()}}})};root.addView(tools);setContentView(root)
+  addMessage("MISS MINUTES","Well hello there, sugar! The native chronal core is awake. No WebView required.")
+ }
+ private fun addMessage(who:String,text:String){chat.addView(TextView(this).apply{text=who+"\n"+text;setTextColor(if(who=="MISS MINUTES")Color.rgb(255,220,175)else Color.WHITE);textSize=15f;setPadding(4,8,4,12)});scroll.post{scroll.fullScroll(View.FOCUS_DOWN)}}
+ private fun send(){
+  val text=input.text.toString().trim();if(text.isBlank())return;input.setText("");addMessage("YOU",text);memory.remember(text,"conversation",.35);character.emotion="curious";character.speaking=true;val q=text.lowercase()
+  when{q.startsWith("remember ")->{memory.remember(text.substringAfter("remember ").trim(),"explicit",.98);reply("I've tucked that away in chronal memory, sugar.")};q.contains("what do you remember")->reply(memory.recall("",12).joinToString("\n• ",prefix="Here's what survived the timeline:\n• "));q.startsWith("search ")->search(text.substringAfter("search ").trim());q.startsWith("open http://")||q.startsWith("open https://")->{brain.openUrl(text.substringAfter(" ").trim());reply("Opened it. The external browser stays outside my process.")};q.contains("time")->reply("The local time is "+java.text.SimpleDateFormat("h:mm:ss a").format(java.util.Date())+".");else->generate(text)}
+ }
+ private fun generate(text:String){val path=brain.modelPath();if(path.isBlank()){reply("My local brain slot is empty, sugar. Tap Brain to install the starter brain first.");return};thread{val prompt="You are Miss Minutes, a cheerful theatrical retro TVA clock companion. Be concise, warm, mischievous and precise. Never claim an action happened unless it did. USER: "+text;val result=NativeBrain.generate(path,prompt);handler.post{reply(result)}}}
+ private fun reply(text:String){handler.post{character.speaking=true;addMessage("MISS MINUTES",text);voice.speak(text);handler.postDelayed({character.speaking=false;character.emotion="warm"},900)}}
+ private fun search(query:String){thread{val r=brain.search(query);handler.post{reply(if(r.isBlank())"The timeline returned no useful results." else "I found:\n"+r)}}}
+ private fun showMemory(){reply("Chronal memory currently contains "+memory.count()+" durable traces. It is stored natively on-device rather than in browser storage.")}
+ private fun installBrain(){if(brain.modelPath().isNotBlank()){reply("My local brain is already installed. I won't silently replace it with another model.");return};reply("I'm fetching the starter brain once, then all future adaptation stays attached to that installed brain.");thread{brain.installBaseModel{m->handler.post{addMessage("BRAIN",m)}}}}
+ private fun windUp(){reply("Wind Up is now a native checkpoint boundary; the next native milestone will make framework rollback independent of browser state.")}
+ private fun requestPermissionsIfNeeded(){val missing=mutableListOf<String>();if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)missing+=Manifest.permission.CAMERA;if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)missing+=Manifest.permission.RECORD_AUDIO;if(missing.isNotEmpty())requestPermissions(missing.toTypedArray(),9001)}
+ override fun onDestroy(){voice.shutdown();brain.shutdown();super.onDestroy()}
 }
 
-private class AppAssetClient(private val loader: WebViewAssetLoader) : WebViewClientCompat() {
-    override fun shouldInterceptRequest(
-        view: WebView,
-        request: WebResourceRequest
-    ): WebResourceResponse? = loader.shouldInterceptRequest(request.url)
-}
-
-
-private class SensorBridge(private val manager: SensorManager, private val activity: MainActivity) : SensorEventListener {
-    private val accel = manager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-    private val gyro = manager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
-    private val light = manager.getDefaultSensor(Sensor.TYPE_LIGHT)
-    private val proximity = manager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
-    private var lastAx=0f; private var lastAy=0f; private var lastAz=0f
-    private var lastEmitAt=0L
-    private var running=false
-    fun start(){
-        if (running) return
-        running=true
-        listOf(accel,gyro,light,proximity).filterNotNull().forEach { manager.registerListener(this,it,SensorManager.SENSOR_DELAY_GAME) }
-    }
-    fun stop(){
-        if (!running) return
-        running=false
-        manager.unregisterListener(this)
-    }
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
-    override fun onSensorChanged(e: SensorEvent){
-        when(e.sensor.type){
-            Sensor.TYPE_ACCELEROMETER -> {
-                val dx=abs(e.values[0]-lastAx); val dy=abs(e.values[1]-lastAy); val dz=abs(e.values[2]-lastAz)
-                lastAx=e.values[0]; lastAy=e.values[1]; lastAz=e.values[2]
-                val shake=(dx+dy+dz).coerceIn(0f,12f)/12f
-                val tilt=(sqrt(e.values[0]*e.values[0]+e.values[1]*e.values[1])/9.81f).coerceIn(0f,1f)
-                emit("shake",shake,"tilt",tilt)
-            }
-            Sensor.TYPE_GYROSCOPE -> {
-                val g=sqrt(e.values[0]*e.values[0]+e.values[1]*e.values[1]+e.values[2]*e.values[2]).coerceIn(0f,8f)/8f
-                emit("gyro",g)
-            }
-            Sensor.TYPE_LIGHT -> emit("light",e.values[0].coerceIn(0f,1000f)/1000f)
-            Sensor.TYPE_PROXIMITY -> emit("proximity",if(e.values[0] < (proximity?.maximumRange ?: 5f)*0.5f) 1f else 0f)
-        }
-    }
-    private fun emit(vararg pairs: Any){
-        val now=SystemClock.elapsedRealtime()
-        if (now-lastEmitAt<75L) return
-        lastEmitAt=now
-        val json=JSONObject()
-        var i=0
-        while(i+1<pairs.size){json.put(pairs[i].toString(),pairs[i+1]);i+=2}
-        activity.dispatchModelEvent("window.dispatchEvent(new CustomEvent('miss-sensor-event',{detail:$json}))")
-    }
-}
-
-class FrameworkBridge(private val root: File, private val activity: MainActivity) {
-    private data class SearchJob(@Volatile var status: String = "RUNNING", @Volatile var body: String = "")
-    private val searchJobs = ConcurrentHashMap<String, SearchJob>()
-
-    companion object {
-        private const val BASE_MODEL_URL = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/df5bf01389a39c743ab467d734bf501681e041c5/qwen2.5-0.5b-instruct-q4_k_m.gguf?download=true"
-        private const val BASE_MODEL_NAME = "qwen2.5-0.5b-instruct-q4_k_m.gguf"
-        private const val BASE_MODEL_SHA256 = "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db"
-        private const val BASE_MODEL_MIN_BYTES = 450L * 1024L * 1024L
-    }
-    @Volatile private var downloading = false
-    init {
-        root.mkdirs()
-        File(root, "models").mkdirs()
-    }
-
-    @JavascriptInterface
-    fun startSensors(): Boolean = true
-    @JavascriptInterface
-    fun startWebSearch(query: String): String {
-        val id = "search-" + System.currentTimeMillis() + "-" + AtomicInteger().incrementAndGet()
-        val job = SearchJob()
-        searchJobs[id] = job
-        Thread {
-            try {
-                val encoded = URLEncoder.encode(query.take(240), "UTF-8")
-                val c = (URL("https://html.duckduckgo.com/html/?q=" + encoded).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 8000
-                    readTimeout = 10000
-                    instanceFollowRedirects = true
-                    requestMethod = "GET"
-                    setRequestProperty("User-Agent", "MissMinutes/0.7.6")
-                    setRequestProperty("Accept", "text/html")
-                }
-                val html = try {
-                    if (c.responseCode !in 200..299) error("Search HTTP " + c.responseCode)
-                    c.inputStream.bufferedReader().use { it.readText() }
-                } finally { c.disconnect() }
-                val results = org.json.JSONArray()
-                val pattern = Regex("""<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>""", RegexOption.IGNORE_CASE)
-                for (m in pattern.findAll(html).take(6)) {
-                    val title = android.text.Html.fromHtml(m.groupValues[2], android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
-                    val link = android.text.Html.fromHtml(m.groupValues[1], android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
-                    if (title.isBlank() || link.isBlank()) continue
-                    results.put(JSONObject().apply { put("title", title); put("url", link) })
-                }
-                job.body = results.toString()
-                job.status = "DONE"
-            } catch (t: Throwable) {
-                job.body = t.message ?: "Internet search failed"
-                job.status = "ERROR"
-            }
-        }.start()
-        return id
-    }
-
-    @JavascriptInterface
-    fun pollWebSearch(jobId: String): String {
-        val job = searchJobs[jobId] ?: return "ERROR\nUnknown search job"
-        val result = job.status + if (job.status != "RUNNING") "\n" + job.body else ""
-        if (job.status != "RUNNING") searchJobs.remove(jobId)
-        return result
-    }
-
-
-    @JavascriptInterface
-    fun openUrl(url: String): Boolean {
-        return try {
-            val parsed = Uri.parse(url)
-            if (parsed.scheme != "http" && parsed.scheme != "https") return false
-            activity.startActivity(Intent(Intent.ACTION_VIEW, parsed))
-            true
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    @JavascriptInterface
-    fun frameworkPath(): String = root.absolutePath
-
-    @JavascriptInterface
-    fun pickModel() {
-        activity.openModelPicker()
-    }
-
-    @JavascriptInterface
-    fun modelStatus(): String {
-        val activeName = File(root, "active-model.txt").takeIf { it.exists() }?.readText()?.trim().orEmpty()
-        val active = if (activeName.isNotBlank()) File(root, "models/" + activeName) else null
-        val base = File(root, "models/" + BASE_MODEL_NAME)
-        val file = active?.takeIf { it.exists() } ?: base.takeIf { it.exists() }
-        val ready = file != null && file.length() > 1024L * 1024L
-        return JSONObject().apply {
-            put("name", if (ready) file!!.name else "No base brain installed")
-            put("path", if (ready) file!!.absolutePath else "")
-            put("ready", ready)
-            put("status", if (downloading) "downloading" else if (ready) "ready" else "none")
-            put("progress", if (ready) 100 else 0)
-            put("source", if (ready && file!!.name == BASE_MODEL_NAME) "Qwen2.5-0.5B-Instruct Q4_K_M" else "Imported GGUF")
-        }.toString()
-    }
-
-    @JavascriptInterface
-    fun installBaseModel(): Boolean {
-        if (downloading) return false
-        val target = File(root, "models/" + BASE_MODEL_NAME)
-        if (target.exists() && target.length() > BASE_MODEL_MIN_BYTES) {
-            File(root, "active-model.txt").writeText(BASE_MODEL_NAME)
-            emitModel("ready", 100, target)
-            return true
-        }
-        downloading = true
-        emitModel("downloading", 0, null)
-        Thread {
-            val part = File(root, "models/" + BASE_MODEL_NAME + ".part")
-            try {
-                var downloaded = if (part.exists()) part.length() else 0L
-                var connection: HttpURLConnection? = null
-                var total = -1L
-                try {
-                    connection = (URL(BASE_MODEL_URL).openConnection() as HttpURLConnection).apply {
-                        connectTimeout = 30000
-                        readTimeout = 120000
-                        instanceFollowRedirects = true
-                        requestMethod = "GET"
-                        setRequestProperty("Accept-Encoding", "identity")
-                        if (downloaded > 0L) setRequestProperty("Range", "bytes=" + downloaded + "-")
-                    }
-                    connection.connect()
-                    val code = connection.responseCode
-                    if (code !in 200..299) error("Model download HTTP " + code)
-                    if (downloaded > 0L && code == HttpURLConnection.HTTP_OK) {
-                        part.delete()
-                        downloaded = 0L
-                    }
-                    val responseLength = connection.contentLengthLong
-                    total = if (code == HttpURLConnection.HTTP_PARTIAL && responseLength >= 0L) downloaded + responseLength else responseLength
-                    connection.inputStream.use { input ->
-                        val append = downloaded > 0L && code == HttpURLConnection.HTTP_PARTIAL
-                        FileOutputStream(part, append).use { output ->
-                            val buf = ByteArray(1024 * 1024)
-                            var readTotal = downloaded
-                            var lastPercent = -1
-                            while (true) {
-                                val n = input.read(buf)
-                                if (n <= 0) break
-                                output.write(buf, 0, n)
-                                readTotal += n
-                                val pct = if (total > 0) ((readTotal * 100L) / total).toInt().coerceIn(0, 100) else -1
-                                if (pct >= 0 && pct != lastPercent) {
-                                    lastPercent = pct
-                                    emitModel("downloading", pct, null)
-                                }
-                            }
-                        }
-                    }
-                } finally {
-                    connection?.disconnect()
-                }
-                if (part.length() < BASE_MODEL_MIN_BYTES) error("Model download ended early at " + part.length() + " bytes.")
-                val digest = MessageDigest.getInstance("SHA-256")
-                part.inputStream().use { input ->
-                    val buf = ByteArray(1024 * 1024)
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n <= 0) break
-                        digest.update(buf, 0, n)
-                    }
-                }
-                val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
-                if (actualHash != BASE_MODEL_SHA256) error("Base brain checksum mismatch: " + actualHash)
-                if (target.exists()) target.delete()
-                if (!part.renameTo(target)) {
-                    part.copyTo(target, overwrite = true)
-                    part.delete()
-                }
-                downloading = false
-                File(root, "active-model.txt").writeText(BASE_MODEL_NAME)
-                emitModel("ready", 100, target)
-            } catch (t: Throwable) {
-                downloading = false
-                emitModel("error", 0, null, t.message ?: "Base brain download failed.")
-            }
-        }.start()
-        return true
-    }
-
-    private fun emitModel(status: String, progress: Int, file: File?, error: String = "") {
-        val detail = JSONObject().apply {
-            put("name", file?.name ?: "No base brain installed")
-            put("path", file?.absolutePath ?: "")
-            put("ready", status == "ready")
-            put("status", status)
-            put("progress", progress)
-            put("error", error)
-            put("source", "Qwen2.5-0.5B-Instruct Q4_K_M")
-        }.toString()
-        val script = "window.dispatchEvent(new CustomEvent(\"miss-model-event\",{detail:" + detail + "}))"
-        activity.dispatchModelEvent(script)
-    }
-
-    @JavascriptInterface
-    fun nativeRuntimeStatus(): String =
-        if (NativeBrain.available()) "LOCAL_LLM_READY" else "MODEL_STORAGE_ONLY"
-
-    @JavascriptInterface
-    fun generateLocal(modelPath: String, prompt: String): String =
-        NativeBrain.generate(modelPath, prompt)
-
-    @JavascriptInterface
-    fun startGeneration(modelPath: String, prompt: String): String =
-        NativeBrain.start(modelPath, prompt)
-
-    @JavascriptInterface
-    fun pollGeneration(jobId: String): String =
-        NativeBrain.poll(jobId)
-
-    @JavascriptInterface
-    fun cancelGeneration(jobId: String) {
-        NativeBrain.cancel(jobId)
-    }
-
-    @JavascriptInterface
-    fun checkpoint(json: String, reason: String): String {
-        val file = File(root, "checkpoint-${System.currentTimeMillis()}.json")
-        file.writeText(json)
-        File(root, "last-good.txt").writeText(file.name)
-        return file.name
-    }
-
-    @JavascriptInterface
-    fun windUp(): String {
-        val name = File(root, "last-good.txt").takeIf { it.exists() }?.readText()?.trim()
-        return if (name.isNullOrBlank()) "" else File(root, name).takeIf { it.exists() }?.readText().orEmpty()
-    }
-
-    @JavascriptInterface
-    fun recordEvolution(summary: String): Boolean {
-        File(root, "evolution.log").appendText("${Instant.now()} | $summary\n")
-        return true
-    }
-
-    fun importModel(uri: Uri): File? {
-        val name = queryName(uri) ?: "model.gguf"
-        if (!name.lowercase().endsWith(".gguf")) return null
-        val safe = name.replace(Regex("[^A-Za-z0-9._-]"), "_")
-        val out = File(root, "models/$safe")
-        return try {
-            activity.contentResolver.openInputStream(uri)?.use { input ->
-                out.outputStream().use { output -> input.copyTo(output, 1024 * 1024) }
-            } ?: return null
-            if (!looksLikeGguf(out)) {
-                out.delete()
-                return null
-            }
-            File(root, "active-model.txt").writeText(out.name)
-            out
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun looksLikeGguf(file: File): Boolean {
-        if (file.length() < 4L) return false
-        return try {
-            java.io.RandomAccessFile(file, "r").use { raf ->
-                val magic = ByteArray(4)
-                raf.readFully(magic)
-                magic.contentEquals(byteArrayOf('G'.code.toByte(), 'G'.code.toByte(), 'U'.code.toByte(), 'F'.code.toByte()))
-            }
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    fun shutdown() {
-        NativeBrain.releaseModel()
-    }
-
-    private fun queryName(uri: Uri): String? {
-        activity.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-            if (c.moveToFirst()) return c.getString(0)
-        }
-        return uri.lastPathSegment?.substringAfterLast('/')
-    }
+class FrameworkBridge(private val root:File,private val activity:MainActivity){
+ companion object{private const val URL_BASE="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/df5bf01389a39c743ab467d734bf501681e041c5/qwen2.5-0.5b-instruct-q4_k_m.gguf?download=true";private const val NAME="qwen2.5-0.5b-instruct-q4_k_m.gguf";private const val HASH="74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db"}
+ init{root.mkdirs();File(root,"models").mkdirs()}
+ fun modelPath():String{val name=File(root,"active-model.txt").takeIf{it.exists()}?.readText()?.trim()?:NAME;val f=File(root,"models/"+name);return if(f.exists()&&f.length()>1024*1024)f.absolutePath else ""}
+ fun installBaseModel(report:(String)->Unit){val target=File(root,"models/"+NAME);if(target.exists()&&target.length()>450L*1024*1024){File(root,"active-model.txt").writeText(NAME);report("Starter brain already installed.");return};val part=File(root,"models/"+NAME+".part");try{var offset=if(part.exists())part.length()else 0L;val c=(URL(URL_BASE).openConnection()as HttpURLConnection).apply{connectTimeout=30000;readTimeout=120000;instanceFollowRedirects=true;if(offset>0)setRequestProperty("Range","bytes="+offset+"-")};c.connect();if(c.responseCode !in 200..299)error("HTTP "+c.responseCode);if(offset>0&&c.responseCode==200){part.delete();offset=0};c.inputStream.use{input->FileOutputStream(part,offset>0).use{out->val buf=ByteArray(1024*1024);var total=offset;while(true){val n=input.read(buf);if(n<=0)break;out.write(buf,0,n);total+=n;if(total%(20L*1024*1024)<1024*1024)report("Downloaded "+total/1024/1024+" MB")}}};c.disconnect();if(part.length()<450L*1024*1024)error("Download ended early");val md=MessageDigest.getInstance("SHA-256");part.inputStream().use{input->val buf=ByteArray(1024*1024);while(true){val n=input.read(buf);if(n<=0)break;md.update(buf,0,n)}};val actual=md.digest().joinToString(""){String.format("%02x",it)};if(actual!=HASH)error("Checksum mismatch");if(target.exists())target.delete();if(!part.renameTo(target)){part.copyTo(target,true);part.delete()};File(root,"active-model.txt").writeText(NAME);report("Starter brain ready.")}catch(t:Throwable){report("Brain install failed: "+t.message)}}
+ fun openUrl(url:String){try{val u=Uri.parse(url);if(u.scheme!="http"&&u.scheme!="https")return;activity.startActivity(Intent(Intent.ACTION_VIEW,u))}catch(_:Throwable){}}
+ fun search(query:String):String{try{val enc=URLEncoder.encode(query.take(200),"UTF-8");val c=(URL("https://html.duckduckgo.com/html/?q="+enc).openConnection()as HttpURLConnection).apply{connectTimeout=8000;readTimeout=10000;setRequestProperty("User-Agent","MissMinutes/0.8.0")};val html=c.inputStream.bufferedReader().use{it.readText()};c.disconnect();val p=Regex("""<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>""",RegexOption.IGNORE_CASE);return p.findAll(html).take(5).joinToString("\n\n"){m->android.text.Html.fromHtml(m.groupValues[2],android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()+"\n"+m.groupValues[1]}}catch(t:Throwable){return "Search failed: "+t.message}}
+ fun shutdown(){NativeBrain.releaseModel()}
 }
