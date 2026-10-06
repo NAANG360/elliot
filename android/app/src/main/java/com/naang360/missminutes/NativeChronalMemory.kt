@@ -20,7 +20,7 @@ class NativeChronalMemory(context: Context) {
  private val lock=Any()
 
  private fun append(file:File,obj:JSONObject){file.appendText(obj.toString()+"\n")}
- private fun read(file:File):List<JSONObject>=if(!file.exists())emptyList()else synchronized(lock){
+ private fun read(file:File): List<JSONObject> =if(!file.exists())emptyList()else synchronized(lock){
   file.useLines{lines->lines.mapNotNull{runCatching{JSONObject(it)}.getOrNull()}.toList()}
  }
 
@@ -47,7 +47,7 @@ class NativeChronalMemory(context: Context) {
   }
  }
 
- fun recall(query:String,limit:Int=16):List<String>=synchronized(lock){
+ fun recall(query:String,limit:Int=16): List<String> =synchronized(lock){
   val terms=query.lowercase().split(Regex("[^a-z0-9_-]+")).filter{it.length>=3}.toSet()
   val now=System.currentTimeMillis()
   read(events).mapNotNull{o->
