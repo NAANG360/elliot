@@ -10,6 +10,12 @@ That privacy statement describes the project's intended distribution boundary; i
 
 This project is intentionally a private fan implementation. It is not an official Marvel, Loki, TVA, or Disney product.
 
+## 0.8.2 native core / adaptive-memory pass
+
+The native rewrite is now the active Android direction. v0.8.2 also fixes the llama.cpp API mismatch introduced by the memory optimization pass and changes the live inference context to an adaptive 2K–16K ceiling: short prompts no longer reserve the full 16K context, while long prompts can still grow when RAM permits.
+
+The roadmap remains: native perception/face memory, a richer native 3D mascot, chronological archive retrieval/compression, capability execution, and a locally trained/adapted Miss Minutes brain. The installed GGUF remains the single base model; autonomous evolution does not download replacement models.
+
 ## 0.8.1 native core expansion
 
 The Android application is now moving off WebView:
