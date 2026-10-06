@@ -34,7 +34,7 @@ class NativeMissMinutesView(context:Context):View(context){
   c.drawText(" .--------. ",cx,cy-r*.20f,p)
   c.drawText("/  12  |  \\ ",cx,cy-r*.02f,p)
   c.drawText("|  9 --O-- 3 |",cx,cy+r*.18f,p)
-  c.drawText("\  6  |  /",cx,cy+r*.38f,p)
+  c.drawText("\\  6  |  /",cx,cy+r*.38f,p)
   c.drawText(" '--------' ",cx,cy+r*.56f,p)
   p.strokeWidth=max(2f,r*.025f);p.style=Paint.Style.STROKE
   val hand=sin(t*5.0)*.9
