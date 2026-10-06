@@ -226,8 +226,8 @@ function App(){
     const context=[
       "FRAMEWORK PERSONA: "+kernel.persona.tone,
       "PERSONA RULES: "+kernel.persona.rules.join(" | "),
-      "ASSOCIATIVE MEMORY: "+memoryRef.current.recall(v,12),
-      "RECENT CONVERSATION: "+messages.slice(-10).map(m=>m.role.toUpperCase()+": "+String(m.text).slice(0,240)).join(" || "),
+      "ASSOCIATIVE MEMORY: "+memoryRef.current.recall(v,24),
+      "RECENT CONVERSATION: "+messages.slice(-24).map(m=>m.role.toUpperCase()+": "+String(m.text).slice(0,700)).join(" || "),
       "CURRENT USER: "+v,
       "Do not merely describe an action. If the user asks you to do something that is available, return an actions array using only web_search, open_url, remember, request_camera, request_microphone, capability_goal, or self_improve. Never claim an action succeeded unless the app can execute it. Return only JSON with text, emotion, gesture, pace, actions, and optional capabilityGoal."
     ].join("\n");

@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <android/log.h>
 #include "llama.h"
+#include "ggml.h"
 #include <atomic>
 #include <algorithm>
 #include <memory>
@@ -40,6 +41,8 @@ std::string run_inference(const std::string& path,const std::string& prompt,cons
         if(cached_model){ llama_model_free(cached_model); cached_model=nullptr; cached_model_path.clear(); }
         auto model_params=llama_model_default_params();
         model_params.n_gpu_layers=0;
+        model_params.use_mmap=true;
+        model_params.use_mlock=false;
         model=llama_model_load_from_file(path.c_str(),model_params);
         if(!model) return "[LOCAL_BRAIN_ERROR] The GGUF model could not be loaded.";
         cached_model=model;
@@ -63,9 +66,14 @@ std::string run_inference(const std::string& path,const std::string& prompt,cons
     if(n_prompt<=0||n_prompt>1800){ return "[LOCAL_BRAIN_ERROR] Prompt is too large."; }
     std::vector<llama_token> tokens(n_prompt);
     if(llama_tokenize(vocab,full.c_str(),full.size(),tokens.data(),tokens.size(),true,true)<0){ return "[LOCAL_BRAIN_ERROR] Tokenization failed."; }
-    const int n_predict=220;
+    const int n_predict=512;
+    constexpr int kContextBudget=16384;
+    if(n_prompt>kContextBudget-n_predict-32){ return "[LOCAL_BRAIN_ERROR] Prompt exceeds the memory-safe context budget."; }
     auto ctx_params=llama_context_default_params();
-    ctx_params.n_ctx=n_prompt+n_predict+8;ctx_params.n_batch=std::min(n_prompt,512);ctx_params.n_threads=4;ctx_params.n_threads_batch=4;
+    ctx_params.n_ctx=kContextBudget;ctx_params.n_batch=std::min(n_prompt,512);ctx_params.n_threads=4;ctx_params.n_threads_batch=4;
+    ctx_params.flash_attn_type=LLAMA_FLASH_ATTN_TYPE_ENABLED;
+    ctx_params.type_k=GGML_TYPE_Q8_0;
+    ctx_params.type_v=GGML_TYPE_Q8_0;
     auto* ctx=llama_init_from_model(model,ctx_params);
     if(!ctx){ return "[LOCAL_BRAIN_ERROR] Could not create inference context."; }
     auto sp=llama_sampler_chain_default_params();
