@@ -36,5 +36,5 @@ jobs:
         run: gradle :app:assembleRelease --no-daemon --stacktrace
       - uses: actions/upload-artifact@v6
         with:
-          name: miss-minutes-0.7.8-apk
+          name: miss-minutes-0.7.9-apk
           path: android/app/build/outputs/apk/release/app-release.apk
