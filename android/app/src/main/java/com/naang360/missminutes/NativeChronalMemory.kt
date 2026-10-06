@@ -13,7 +13,8 @@ import kotlin.math.max
  * retrieved by relevance, importance, recency and memory type.
  */
 class NativeChronalMemory(context: Context) {
- private val dir=File(context.filesDir,"chronal-memory").apply{mkdirs()}
+ private val appContext=context.applicationContext
+ private val dir=File(appContext.filesDir,"chronal-memory").apply{mkdirs()}
  private val events=File(dir,"events.jsonl")
  private val ledger=File(dir,"mutation-ledger.jsonl")
  private val lock=Any()
