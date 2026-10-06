@@ -41,8 +41,6 @@ std::string run_inference(const std::string& path,const std::string& prompt,cons
         if(cached_model){ llama_model_free(cached_model); cached_model=nullptr; cached_model_path.clear(); }
         auto model_params=llama_model_default_params();
         model_params.n_gpu_layers=0;
-        model_params.use_mmap=true;
-        model_params.use_mlock=false;
         model=llama_model_load_from_file(path.c_str(),model_params);
         if(!model) return "[LOCAL_BRAIN_ERROR] The GGUF model could not be loaded.";
         cached_model=model;
@@ -67,10 +65,18 @@ std::string run_inference(const std::string& path,const std::string& prompt,cons
     std::vector<llama_token> tokens(n_prompt);
     if(llama_tokenize(vocab,full.c_str(),full.size(),tokens.data(),tokens.size(),true,true)<0){ return "[LOCAL_BRAIN_ERROR] Tokenization failed."; }
     const int n_predict=512;
-    constexpr int kContextBudget=16384;
-    if(n_prompt>kContextBudget-n_predict-32){ return "[LOCAL_BRAIN_ERROR] Prompt exceeds the memory-safe context budget."; }
+    // Keep the advertised 16K ceiling while adapting the live context to the
+    // prompt size. The model is memory-mapped by the llama.cpp build itself;
+    // the application owns only the active KV/context allocation here.
+    constexpr int kContextCeiling=16384;
+    constexpr int kContextFloor=2048;
+    const int requested=n_prompt+n_predict+32;
+    int live_context=kContextFloor;
+    while(live_context<requested && live_context<kContextCeiling) live_context*=2;
+    live_context=std::min(live_context,kContextCeiling);
+    if(requested>live_context){ return "[LOCAL_BRAIN_ERROR] Prompt exceeds the memory-safe context ceiling."; }
     auto ctx_params=llama_context_default_params();
-    ctx_params.n_ctx=kContextBudget;ctx_params.n_batch=std::min(n_prompt,512);ctx_params.n_threads=4;ctx_params.n_threads_batch=4;
+    ctx_params.n_ctx=live_context;ctx_params.n_batch=std::min(n_prompt,512);ctx_params.n_threads=4;ctx_params.n_threads_batch=4;
     ctx_params.flash_attn_type=LLAMA_FLASH_ATTN_TYPE_ENABLED;
     ctx_params.type_k=GGML_TYPE_Q8_0;
     ctx_params.type_v=GGML_TYPE_Q8_0;
