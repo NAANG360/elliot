@@ -9,8 +9,8 @@ android {
         applicationId="com.naang360.missminutes"
         minSdk=28
         targetSdk=36
-        versionCode=54
-        versionName="0.8.9"
+        versionCode=55
+        versionName="0.8.10"
         ndk { abiFilters += listOf("arm64-v8a") }
     }
     compileOptions {
@@ -36,7 +36,7 @@ android {
 
 dependencies {
     implementation("androidx.documentfile:documentfile:1.1.0")
-    implementation("com.github.k2-fsa:sherpa-onnx:v1.13.8")
+    implementation(files("libs/sherpa-onnx-1.13.8.aar"))
 }
 }
 kotlin {
