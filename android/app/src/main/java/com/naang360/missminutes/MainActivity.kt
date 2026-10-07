@@ -39,17 +39,20 @@ class MainActivity : Activity() {
  override fun onCreate(state:Bundle?){super.onCreate(state);brain=FrameworkBridge(filesDir.resolve("framework"),this);memory=NativeChronalMemory(this);voice=VoiceBackend(this);buildUi();requestPermissionsIfNeeded()}
  private fun buildUi(){
   val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(Color.rgb(12,8,4));setPadding(18,18,18,12)}
-  root.addView(TextView(this).apply{text="TIME VARIANCE AUTHORITY\nMISS MINUTES";setTextColor(Color.rgb(255,190,105));textSize=20f;gravity=Gravity.CENTER;setPadding(0,4,0,10)},LinearLayout.LayoutParams(-1,-2))
+  root.addView(TextView(this).apply{text="TIME VARIANCE AUTHORITY
+MISS MINUTES";setTextColor(Color.rgb(255,190,105));textSize=20f;gravity=Gravity.CENTER;setPadding(0,4,0,10)},LinearLayout.LayoutParams(-1,-2))
   character=NativeMissMinutesView(this);root.addView(character,LinearLayout.LayoutParams(-1,0,1f))
   scroll=ScrollView(this).apply{setBackgroundColor(Color.rgb(22,14,9));setPadding(12,8,12,8)};chat=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};scroll.addView(chat);root.addView(scroll,LinearLayout.LayoutParams(-1,0,.72f))
   val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL};input=EditText(this).apply{hint="Speak, sugar...";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(false);setMaxLines(3)};row.addView(input,LinearLayout.LayoutParams(0,-2,1f));row.addView(Button(this).apply{text="↗";setOnClickListener{send()}},LinearLayout.LayoutParams(64,-2));root.addView(row)
   val tools=LinearLayout(this).apply{gravity=Gravity.CENTER}
   listOf("Memory","Brain","Wind Up").forEach{label->tools.addView(Button(this).apply{text=label;setOnClickListener{when(label){"Memory"->showMemory();"Brain"->installBrain();"Wind Up"->windUp()}}})}
-  tools.addView(Button(this).apply{text="VOICE";setOnClickListener{showVoicePicker()}})\n  tools.addView(Button(this).apply{text="VOICE LAB";setOnClickListener{showVoiceLab()}})
+  tools.addView(Button(this).apply{text="VOICE";setOnClickListener{showVoicePicker()}})
+  tools.addView(Button(this).apply{text="VOICE LAB";setOnClickListener{showVoiceLab()}})
   root.addView(tools);setContentView(root)
   addMessage("MISS MINUTES","Well hello there, sugar! The native chronal core is awake. No WebView required.")
  }
- private fun addMessage(who:String,message:String){chat.addView(TextView(this).apply{text=who+"\n"+message;setTextColor(if(who=="MISS MINUTES")Color.rgb(255,220,175)else Color.WHITE);textSize=15f;setPadding(4,8,4,12)});scroll.post{scroll.fullScroll(View.FOCUS_DOWN)}}
+ private fun addMessage(who:String,message:String){chat.addView(TextView(this).apply{text=who+"
+"+message;setTextColor(if(who=="MISS MINUTES")Color.rgb(255,220,175)else Color.WHITE);textSize=15f;setPadding(4,8,4,12)});scroll.post{scroll.fullScroll(View.FOCUS_DOWN)}}
  private fun send(){
   val text=input.text.toString().trim();if(text.isBlank())return
   input.setText("")
@@ -61,7 +64,9 @@ class MainActivity : Activity() {
   character.emotion="curious"
   val token=generationToken
   val q=text.lowercase()
-  when{q.startsWith("remember ")->{memory.remember(text.substringAfter("remember ").trim(),"explicit",.98);reply("I've tucked that away in chronal memory, sugar.")};q.contains("what do you remember")->reply(memory.recall("",12).joinToString("\n• ",prefix="Here's what survived the timeline:\n• "));q.startsWith("search ")->search(text.substringAfter("search ").trim());q.startsWith("open http://")||q.startsWith("open https://")->{brain.openUrl(text.substringAfter(" ").trim());reply("Opened it. The external browser stays outside my process.")};q.contains("accessibility")->openAccessibility();q.contains("time")->reply("The local time is "+java.text.SimpleDateFormat("h:mm:ss a").format(java.util.Date())+".");else->generate(text,token)}
+  when{q.startsWith("remember ")->{memory.remember(text.substringAfter("remember ").trim(),"explicit",.98);reply("I've tucked that away in chronal memory, sugar.")};q.contains("what do you remember")->reply(memory.recall("",12).joinToString("
+• ",prefix="Here's what survived the timeline:
+• "));q.startsWith("search ")->search(text.substringAfter("search ").trim());q.startsWith("open http://")||q.startsWith("open https://")->{brain.openUrl(text.substringAfter(" ").trim());reply("Opened it. The external browser stays outside my process.")};q.contains("accessibility")->openAccessibility();q.contains("time")->reply("The local time is "+java.text.SimpleDateFormat("h:mm:ss a").format(java.util.Date())+".");else->generate(text,token)}
  }
  private fun generate(text:String, token:Long){val path=brain.modelPath();if(path.isBlank()){reply("My local brain slot is empty, sugar. Tap Brain to install the starter brain first.");return};thread{val prompt="You are Miss Minutes, a cheerful theatrical retro TVA clock companion. Be concise, warm, mischievous and precise. Never claim an action happened unless it did. USER: "+text;val result=NativeBrain.generate(path,prompt);handler.post{if(token==generationToken)reply(result)}}}
  private fun cleanModelReply(raw:String):String{
@@ -73,7 +78,8 @@ class MainActivity : Activity() {
   if(text.contains("Assistant:"))text=text.substringAfterLast("Assistant:").trim()
   text=text.replace(Regex("(?im)^User:\\s*.*$"),"").replace(Regex("(?im)^Assistant:\\s*"),"")
   val seen=HashSet<String>()
-  text=text.lines().map{it.trimEnd()}.filter{it.isNotBlank()&&seen.add(it.trim().lowercase())}.joinToString("\n").trim()
+  text=text.lines().map{it.trimEnd()}.filter{it.isNotBlank()&&seen.add(it.trim().lowercase())}.joinToString("
+").trim()
   if(text.isBlank())text="I'm sorry, sugar. My chronal response came back empty."
   return text.take(1200)
  }
@@ -146,7 +152,8 @@ class MainActivity : Activity() {
   if(enabled) reply("Android Accessibility is connected, sugar. My native accessibility service is enabled.")
   else {reply("Let's connect it properly. I'm opening Android Accessibility settings; enable Miss Minutes there, then come back.");startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))}
  }
- private fun search(query:String){thread{val r=brain.search(query);handler.post{reply(if(r.isBlank())"The timeline returned no useful results." else "I found:\n"+r)}}}
+ private fun search(query:String){thread{val r=brain.search(query);handler.post{reply(if(r.isBlank())"The timeline returned no useful results." else "I found:
+"+r)}}}
  private fun showMemory(){reply("Chronal memory currently contains "+memory.count()+" durable traces. It is stored natively on-device rather than in browser storage.")}
  private fun installBrain(){if(brain.modelPath().isNotBlank()){reply("My local brain is already installed. I won't silently replace it with another model.");return};reply("I'm fetching the starter brain once, then all future adaptation stays attached to that installed brain.");thread{brain.installBaseModel{m->handler.post{addMessage("BRAIN",m)}}}}
  private fun windUp(){reply("Wind Up is now a native checkpoint boundary; the next native milestone will make framework rollback independent of browser state.")}
@@ -160,6 +167,9 @@ class FrameworkBridge(private val root:File,private val activity:MainActivity){
  fun modelPath():String{val name=File(root,"active-model.txt").takeIf{it.exists()}?.readText()?.trim()?:NAME;val f=File(root,"models/"+name);return if(f.exists()&&f.length()>1024*1024)f.absolutePath else ""}
  fun installBaseModel(report:(String)->Unit){val target=File(root,"models/"+NAME);if(target.exists()&&target.length()>450L*1024*1024){File(root,"active-model.txt").writeText(NAME);report("Starter brain already installed.");return};val part=File(root,"models/"+NAME+".part");try{var offset=if(part.exists())part.length()else 0L;val c=(URL(URL_BASE).openConnection()as HttpURLConnection).apply{connectTimeout=30000;readTimeout=120000;instanceFollowRedirects=true;if(offset>0)setRequestProperty("Range","bytes="+offset+"-")};c.connect();if(c.responseCode !in 200..299)error("HTTP "+c.responseCode);if(offset>0&&c.responseCode==200){part.delete();offset=0};c.inputStream.use{input->FileOutputStream(part,offset>0).use{out->val buf=ByteArray(1024*1024);var total=offset;while(true){val n=input.read(buf);if(n<=0)break;out.write(buf,0,n);total+=n;if(total%(20L*1024*1024)<1024*1024)report("Downloaded "+total/1024/1024+" MB")}}};c.disconnect();if(part.length()<450L*1024*1024)error("Download ended early");val md=MessageDigest.getInstance("SHA-256");part.inputStream().use{input->val buf=ByteArray(1024*1024);while(true){val n=input.read(buf);if(n<=0)break;md.update(buf,0,n)}};val actual=md.digest().joinToString(""){String.format("%02x",it)};if(actual!=HASH)error("Checksum mismatch");if(target.exists())target.delete();if(!part.renameTo(target)){part.copyTo(target,true);part.delete()};File(root,"active-model.txt").writeText(NAME);report("Starter brain ready.")}catch(t:Throwable){report("Brain install failed: "+t.message)}}
  fun openUrl(url:String){try{val u=Uri.parse(url);if(u.scheme!="http"&&u.scheme!="https")return;activity.startActivity(Intent(Intent.ACTION_VIEW,u))}catch(_:Throwable){}}
- fun search(query:String):String{try{val enc=URLEncoder.encode(query.take(200),"UTF-8");val c=(URL("https://html.duckduckgo.com/html/?q="+enc).openConnection()as HttpURLConnection).apply{connectTimeout=8000;readTimeout=10000;setRequestProperty("User-Agent","MissMinutes/0.8.2")};val html=c.inputStream.bufferedReader().use{it.readText()};c.disconnect();val p=Regex("""<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>""",RegexOption.IGNORE_CASE);return p.findAll(html).take(5).joinToString("\n\n"){m->android.text.Html.fromHtml(m.groupValues[2],android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()+"\n"+m.groupValues[1]}}catch(t:Throwable){return "Search failed: "+t.message}}
+ fun search(query:String):String{try{val enc=URLEncoder.encode(query.take(200),"UTF-8");val c=(URL("https://html.duckduckgo.com/html/?q="+enc).openConnection()as HttpURLConnection).apply{connectTimeout=8000;readTimeout=10000;setRequestProperty("User-Agent","MissMinutes/0.8.2")};val html=c.inputStream.bufferedReader().use{it.readText()};c.disconnect();val p=Regex("""<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>""",RegexOption.IGNORE_CASE);return p.findAll(html).take(5).joinToString("
+
+"){m->android.text.Html.fromHtml(m.groupValues[2],android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()+"
+"+m.groupValues[1]}}catch(t:Throwable){return "Search failed: "+t.message}}
  fun shutdown(){NativeBrain.releaseModel()}
 }
