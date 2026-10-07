@@ -103,7 +103,7 @@ class MainActivity : Activity() {
     }
     else->showVoiceLab()
    }
-  }.setNegativeButton("Android TTS settings"){_,_->startActivity(Intent(Settings.ACTION_TTS_SETTINGS))}
+  }.setNegativeButton("Android TTS settings"){_,_->startActivity(Intent("com.android.settings.TTS_SETTINGS"))}
    .setPositiveButton(if(voiceEnabled)"VOICE ON" else "VOICE OFF"){_,_->voiceEnabled=!voiceEnabled;if(!voiceEnabled){voice.stop();character.speaking=false}}
    .show()
  }
