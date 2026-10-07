@@ -15,7 +15,16 @@ def bundle(a):
     onnx=Path(a.onnx).resolve(); config=Path(a.config).resolve(); dataset=Path(a.dataset).resolve(); out=Path(a.output).resolve()
     if not onnx.is_file() or not config.is_file(): raise SystemExit("ONNX model and matching config are required")
     espeak=dataset/"espeak-ng-data"
-    if not espeak.is_dir(): raise SystemExit("dataset/espeak-ng-data is missing; copy the eSpeak data used by training into the dataset")
+    if not espeak.is_dir():
+        try:
+            import piper
+            candidates=list(Path(piper.__file__).resolve().parent.rglob("espeak-ng-data"))
+            if candidates:
+                shutil.copytree(candidates[0],espeak,dirs_exist_ok=True)
+        except Exception:
+            pass
+    if not espeak.is_dir():
+        raise SystemExit("dataset/espeak-ng-data is missing and could not be located inside the installed Piper package")
     out.mkdir(parents=True,exist_ok=True)
     shutil.copy2(onnx,out/onnx.name)
     shutil.copy2(config,out/(onnx.name+".json"))
