@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Miss Minutes</string>
+    <string name="accessibility_service_description">Native Miss Minutes accessibility bridge. It only becomes active after you explicitly enable the service in Android Accessibility settings.</string>
+</resources>
