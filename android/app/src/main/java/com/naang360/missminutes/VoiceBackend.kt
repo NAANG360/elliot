@@ -198,7 +198,7 @@ class VoiceBackend(private val context:Context){
    return "Import failed: ${t.message}"
   }
  }
- fun deleteCustomVoice(id:String){customVoiceDir(id)?.deleteRecursively();if(selectedCustom==id){selectedCustom=null;selectAndroidEngine(enginePackage ?: TextToSpeech.getDefaultEngine(context))}}
+ fun deleteCustomVoice(id:String){customVoiceDir(id)?.deleteRecursively();if(selectedCustom==id){selectedCustom=null;selectAndroidEngine(enginePackage ?: Settings.Secure.getString(context.contentResolver,Settings.Secure.TTS_DEFAULT_SYNTH))}}
  private fun customVoiceDir(id:String):File?=File(voiceRoot,id).takeIf{it.exists()}
  private fun copyDocument(src:DocumentFile,dst:File){
   dst.parentFile?.mkdirs()
