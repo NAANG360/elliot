@@ -18,6 +18,10 @@ jobs:
         with: { gradle-version: "8.13" }
       - name: Fetch local inference engine
         run: git clone --depth 1 https://github.com/ggml-org/llama.cpp.git android/app/src/main/cpp/llama.cpp
+      - name: Fetch sherpa-onnx Android runtime
+        run: |
+          mkdir -p android/app/libs
+          curl -L --fail --retry 3 -o android/app/libs/sherpa-onnx-1.13.8.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar
       - name: Restore stable release signing key
         run: |
           base64 -d android/app/miss-minutes-release.jks.b64 > android/app/miss-minutes-release.jks
