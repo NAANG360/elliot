@@ -79,14 +79,33 @@ class MainActivity : Activity() {
  }
  private fun reply(rawText:String){handler.post{val text=cleanModelReply(rawText);character.speaking=voiceEnabled;addMessage("MISS MINUTES",text);if(voiceEnabled)voice.speak(text.take(700));handler.postDelayed({character.speaking=false;character.emotion="warm"},maxOf(900L,text.length*35L))}}
  private fun showVoicePicker(){
+  val engines=voice.engineInfos()
+  val labels=engines.map{it.label.toString()+if(it.name==voice.enginePackage())"  ✓" else ""}.toTypedArray()
+  val items=ArrayList<String>()
+  items.add("TTS ENGINE")
+  items.addAll(labels.toList())
+  items.add("VOICE")
+  val builder=AlertDialog.Builder(this).setTitle("Miss Minutes Speech")
+  builder.setItems(items.toTypedArray()){_,which->
+   if(which==0)return@setItems
+   if(which<=engines.size){
+    voice.selectEngine(engines[which-1].name)
+    reply("Speech engine set to "+engines[which-1].label+".")
+   }else showVoiceList()
+  }.setNegativeButton("Android TTS settings"){_,_->startActivity(Intent(Settings.ACTION_TTS_SETTINGS))}
+   .setPositiveButton(if(voiceEnabled)"VOICE ON" else "VOICE OFF"){_,_->voiceEnabled=!voiceEnabled;if(!voiceEnabled){voice.stop();character.speaking=false}}
+   .show()
+ }
+ private fun showVoiceList(){
   val names=voice.availableVoices().map{it.name}.toTypedArray()
   if(names.isEmpty()){startActivity(Intent(Settings.ACTION_TTS_SETTINGS));return}
   val current=voice.currentVoiceName()
   val checked=names.indexOf(current).coerceAtLeast(0)
-  AlertDialog.Builder(this).setTitle("Miss Minutes Voice")
-   .setSingleChoiceItems(names,checked){dialog,which->voice.selectVoice(names[which]);dialog.dismiss();reply("Voice set to "+names[which]+".")}
-   .setNegativeButton("Android TTS settings"){_,_->startActivity(Intent(Settings.ACTION_TTS_SETTINGS))}
-   .setPositiveButton(if(voiceEnabled)"VOICE ON" else "VOICE OFF"){_,_->voiceEnabled=!voiceEnabled;if(!voiceEnabled){voice.stop();character.speaking=false}}
+  AlertDialog.Builder(this).setTitle("Voice: "+(voice.enginePackage() ?: "default"))
+   .setSingleChoiceItems(names,checked){dialog,which->
+    if(voice.selectVoice(names[which]))reply("Voice set to "+names[which]+".")
+    dialog.dismiss()
+   }.setNegativeButton("Back"){_,_->showVoicePicker()}
    .show()
  }
  private fun openAccessibility(){
