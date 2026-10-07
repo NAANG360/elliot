@@ -9,9 +9,12 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
+import android.content.ComponentName
 import android.view.Gravity
 import android.view.View
 import android.widget.*
+import android.app.AlertDialog
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -42,7 +45,7 @@ class MainActivity : Activity() {
   val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL};input=EditText(this).apply{hint="Speak, sugar...";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(false);setMaxLines(3)};row.addView(input,LinearLayout.LayoutParams(0,-2,1f));row.addView(Button(this).apply{text="↗";setOnClickListener{send()}},LinearLayout.LayoutParams(64,-2));root.addView(row)
   val tools=LinearLayout(this).apply{gravity=Gravity.CENTER}
   listOf("Memory","Brain","Wind Up").forEach{label->tools.addView(Button(this).apply{text=label;setOnClickListener{when(label){"Memory"->showMemory();"Brain"->installBrain();"Wind Up"->windUp()}}})}
-  tools.addView(Button(this).apply{text="VOICE ON";setOnClickListener{voiceEnabled=!voiceEnabled;if(!voiceEnabled){voice.stop();character.speaking=false};text=if(voiceEnabled)"VOICE ON" else "VOICE OFF"}})
+  tools.addView(Button(this).apply{text="VOICE";setOnClickListener{showVoicePicker()}})
   root.addView(tools);setContentView(root)
   addMessage("MISS MINUTES","Well hello there, sugar! The native chronal core is awake. No WebView required.")
  }
@@ -58,7 +61,7 @@ class MainActivity : Activity() {
   character.emotion="curious"
   val token=generationToken
   val q=text.lowercase()
-  when{q.startsWith("remember ")->{memory.remember(text.substringAfter("remember ").trim(),"explicit",.98);reply("I've tucked that away in chronal memory, sugar.")};q.contains("what do you remember")->reply(memory.recall("",12).joinToString("\n• ",prefix="Here's what survived the timeline:\n• "));q.startsWith("search ")->search(text.substringAfter("search ").trim());q.startsWith("open http://")||q.startsWith("open https://")->{brain.openUrl(text.substringAfter(" ").trim());reply("Opened it. The external browser stays outside my process.")};q.contains("time")->reply("The local time is "+java.text.SimpleDateFormat("h:mm:ss a").format(java.util.Date())+".");else->generate(text,token)}
+  when{q.startsWith("remember ")->{memory.remember(text.substringAfter("remember ").trim(),"explicit",.98);reply("I've tucked that away in chronal memory, sugar.")};q.contains("what do you remember")->reply(memory.recall("",12).joinToString("\n• ",prefix="Here's what survived the timeline:\n• "));q.startsWith("search ")->search(text.substringAfter("search ").trim());q.startsWith("open http://")||q.startsWith("open https://")->{brain.openUrl(text.substringAfter(" ").trim());reply("Opened it. The external browser stays outside my process.")};q.contains("accessibility")->openAccessibility();q.contains("time")->reply("The local time is "+java.text.SimpleDateFormat("h:mm:ss a").format(java.util.Date())+".");else->generate(text,token)}
  }
  private fun generate(text:String, token:Long){val path=brain.modelPath();if(path.isBlank()){reply("My local brain slot is empty, sugar. Tap Brain to install the starter brain first.");return};thread{val prompt="You are Miss Minutes, a cheerful theatrical retro TVA clock companion. Be concise, warm, mischievous and precise. Never claim an action happened unless it did. USER: "+text;val result=NativeBrain.generate(path,prompt);handler.post{if(token==generationToken)reply(result)}}}
  private fun cleanModelReply(raw:String):String{
@@ -75,6 +78,23 @@ class MainActivity : Activity() {
   return text.take(1200)
  }
  private fun reply(rawText:String){handler.post{val text=cleanModelReply(rawText);character.speaking=voiceEnabled;addMessage("MISS MINUTES",text);if(voiceEnabled)voice.speak(text.take(700));handler.postDelayed({character.speaking=false;character.emotion="warm"},maxOf(900L,text.length*35L))}}
+ private fun showVoicePicker(){
+  val names=voice.availableVoices().map{it.name}.toTypedArray()
+  if(names.isEmpty()){startActivity(Intent(Settings.ACTION_TTS_SETTINGS));return}
+  val current=voice.currentVoiceName()
+  val checked=names.indexOf(current).coerceAtLeast(0)
+  AlertDialog.Builder(this).setTitle("Miss Minutes Voice")
+   .setSingleChoiceItems(names,checked){dialog,which->voice.selectVoice(names[which]);dialog.dismiss();reply("Voice set to "+names[which]+".")}
+   .setNegativeButton("Android TTS settings"){_,_->startActivity(Intent(Settings.ACTION_TTS_SETTINGS))}
+   .setPositiveButton(if(voiceEnabled)"VOICE ON" else "VOICE OFF"){_,_->voiceEnabled=!voiceEnabled;if(!voiceEnabled){voice.stop();character.speaking=false}}
+   .show()
+ }
+ private fun openAccessibility(){
+  val component=ComponentName(this,MissMinutesAccessibilityService::class.java).flattenToString()
+  val enabled=Settings.Secure.getString(contentResolver,Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)?.split(":")?.any{it.equals(component,true)}==true
+  if(enabled) reply("Android Accessibility is connected, sugar. My native accessibility service is enabled.")
+  else {reply("Let's connect it properly. I'm opening Android Accessibility settings; enable Miss Minutes there, then come back.");startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))}
+ }
  private fun search(query:String){thread{val r=brain.search(query);handler.post{reply(if(r.isBlank())"The timeline returned no useful results." else "I found:\n"+r)}}}
  private fun showMemory(){reply("Chronal memory currently contains "+memory.count()+" durable traces. It is stored natively on-device rather than in browser storage.")}
  private fun installBrain(){if(brain.modelPath().isNotBlank()){reply("My local brain is already installed. I won't silently replace it with another model.");return};reply("I'm fetching the starter brain once, then all future adaptation stays attached to that installed brain.");thread{brain.installBaseModel{m->handler.post{addMessage("BRAIN",m)}}}}
