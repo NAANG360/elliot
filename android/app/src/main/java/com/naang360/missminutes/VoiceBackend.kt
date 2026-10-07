@@ -7,6 +7,7 @@ import android.media.AudioTrack
 import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
+import android.provider.Settings
 import androidx.documentfile.provider.DocumentFile
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
@@ -127,7 +128,7 @@ class PiperVoiceBackend(private val root:File):SpeechBackend{
 class VoiceBackend(private val context:Context){
  private val prefs=context.getSharedPreferences("miss_minutes_voice",Context.MODE_PRIVATE)
  private val voiceRoot=File(context.filesDir,"voices").apply{mkdirs()}
- private var enginePackage:String?=prefs.getString("engine_package",TextToSpeech.getDefaultEngine(context))
+ private var enginePackage:String?=prefs.getString("engine_package",Settings.Secure.getString(context.contentResolver,Settings.Secure.TTS_DEFAULT_SYNTH))
  private var android=AndroidTtsBackend(context,enginePackage)
  private var backend:SpeechBackend=android
  private var selectedCustom:String?=prefs.getString("custom_voice_id",null)
