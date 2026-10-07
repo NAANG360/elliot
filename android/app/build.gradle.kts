@@ -32,7 +32,12 @@ android {
         }
     }
     externalNativeBuild { cmake { path=file("src/main/cpp/CMakeLists.txt") } }
-    packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }\n\ndependencies {\n    implementation("androidx.documentfile:documentfile:1.1.0")\n    implementation("com.github.k2-fsa:sherpa-onnx:v1.13.8")\n}
+    packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+
+dependencies {
+    implementation("androidx.documentfile:documentfile:1.1.0")
+    implementation("com.github.k2-fsa:sherpa-onnx:v1.13.8")
+}
 }
 kotlin {
     jvmToolchain(17)
