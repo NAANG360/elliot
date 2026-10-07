@@ -58,13 +58,21 @@ class MainActivity : Activity() {
   voice.stop()
   character.speaking=true
   addMessage("YOU",text)
-  memory.remember(text,"conversation",.35)
+  memory.remember(text,"conversation",.35,type="episode")
   character.emotion="curious"
   val token=generationToken
   val q=text.lowercase()
-  when{q.startsWith("remember ")->{memory.remember(text.substringAfter("remember ").trim(),"explicit",.98);reply("I've tucked that away in chronal memory, sugar.")};q.contains("what do you remember")->reply(memory.recall("",12).joinToString("\n• ",prefix="Here's what survived the timeline:\n• "));q.startsWith("search ")->search(text.substringAfter("search ").trim());q.startsWith("open http://")||q.startsWith("open https://")->{brain.openUrl(text.substringAfter(" ").trim());reply("Opened it. The external browser stays outside my process.")};q.contains("accessibility")->openAccessibility();q.contains("time")->reply("The local time is "+java.text.SimpleDateFormat("h:mm:ss a").format(java.util.Date())+".");else->generate(text,token)}
+  when{q.startsWith("remember ")->{memory.remember(text.substringAfter("remember ").trim(),"explicit",.98);reply("I've tucked that away in chronal memory, sugar.")};q.contains("what do you remember")->reply(memory.recall("",12).joinToString("\n• ",prefix="Here's what survived the timeline:\n• "));q.startsWith("search ")->search(text.substringAfter("search ").trim());q.startsWith("open http://")||q.startsWith("open https://")->{brain.openUrl(text.substringAfter(" ").trim());reply("Opened it. The external browser stays outside my process.")};q.contains("play chess")||q.contains("chess mode")||q=="chess"->{startChessMode()}
+   q.contains("back out")||q.contains("go back")||q=="back"->{performAccessibilityBack()}
+   q.contains("accessibility")->openAccessibility()
+   q.startsWith("search ")||q.startsWith("search the web ")||q.startsWith("look up ")||q.startsWith("look online ")->search(extractSearchQuery(text))
+   q.contains("time")->reply("The local time is "+java.text.SimpleDateFormat("h:mm:ss a").format(java.util.Date())+".")
+   else->generate(text,token)}
  }
- private fun generate(text:String, token:Long){val path=brain.modelPath();if(path.isBlank()){reply("My local brain slot is empty, sugar. Tap Brain to install the starter brain first.");return};thread{val prompt="You are Miss Minutes, a cheerful theatrical retro TVA clock companion. Be concise, warm, mischievous and precise. Never claim an action happened unless it did. USER: "+text;val result=NativeBrain.generate(path,prompt);handler.post{if(token==generationToken)reply(result)}}}
+ private fun generate(text:String, token:Long){val path=brain.modelPath();if(path.isBlank()){reply("My local brain slot is empty, sugar. Tap Brain to install the starter brain first.");return};thread{val prompt="You are Miss Minutes, a cheerful theatrical retro TVA clock companion. Be concise, warm, mischievous and precise. Never claim an action happened unless it did. USER: "+text;val result=NativeBrain.generate(path,prompt);handler.post{if(token==generationToken){
+   memory.remember(result,"assistant-response",.22,type="episode")
+   reply(result)
+  }}}}
  private fun cleanModelReply(raw:String):String{
   var text=raw.trim()
   try{
@@ -140,6 +148,24 @@ class MainActivity : Activity() {
     else reply("Custom voice imported and ready: "+result+". Open VOICE to select it.")
    }
   }
+ }
+ private fun extractSearchQuery(text:String):String{
+  val q=text.trim()
+  return when{
+   q.lowercase().startsWith("search the web ")->q.substring(15).trim()
+   q.lowercase().startsWith("look up ")->q.substring(8).trim()
+   q.lowercase().startsWith("look online ")->q.substring(12).trim()
+   else->q.substringAfter("search ",q).trim()
+  }.take(240)
+ }
+ private fun performAccessibilityBack(){
+  val service=MissMinutesAccessibilityService.instance
+  if(service?.goBack()==true) reply("Back we go, sugar. The Accessibility API just handled that for you.")
+  else reply("My Accessibility service isn't connected yet, sugar. Enable Miss Minutes in Android Accessibility settings first.")
+ }
+ private fun startChessMode(){
+  memory.remember("User asked to play chess with Miss Minutes.","explicit",.8,type="decision",entities=listOf("chess","miss-minutes"))
+  startActivity(Intent(this,ChessModeActivity::class.java))
  }
  private fun openAccessibility(){
   val component=ComponentName(this,MissMinutesAccessibilityService::class.java).flattenToString()
