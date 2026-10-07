@@ -69,9 +69,25 @@ class NativeMissMinutesView(context:Context):View(context){
    c.drawCircle(cx-r*.28f+shift+eyeJitter,cy-r*.14f,r*.13f,p);c.drawCircle(cx+r*.28f+shift-eyeJitter,cy-r*.14f,r*.13f,p)
    p.color=Color.rgb(46,26,18);c.drawCircle(cx,cy+r*.02f,r*.045f,p)
    p.style=Paint.Style.STROKE;p.strokeWidth=r*.028f;p.strokeCap=Paint.Cap.ROUND
-   val ha=if(speaking)t*3.8 else t*.7
-   c.drawLine(cx,cy,cx+cos(ha).toFloat()*r*.62f,cy+sin(ha).toFloat()*r*.62f,p)
-   c.drawLine(cx,cy,cx+cos(ha+Math.PI/2).toFloat()*r*.38f,cy+sin(ha+Math.PI/2).toFloat()*r*.38f,p)
+   // Real clock geometry: hour/minute/second follow the device's local time.
+   // The second hand is continuous while the hour hand includes the minute fraction.
+   val now=java.util.Calendar.getInstance()
+   val millis=now.get(java.util.Calendar.MILLISECOND)
+   val sec=now.get(java.util.Calendar.SECOND)+millis/1000f
+   val minute=now.get(java.util.Calendar.MINUTE)+sec/60f
+   val hour=(now.get(java.util.Calendar.HOUR)%12)+minute/60f
+   val minuteAngle=Math.toRadians(minute*6.0-90.0)
+   val hourAngle=Math.toRadians(hour*30.0-90.0)
+   val secondAngle=Math.toRadians(sec*6.0-90.0)
+   p.strokeCap=Paint.Cap.ROUND
+   p.strokeWidth=r*.045f
+   c.drawLine(cx,cy,cx+cos(hourAngle).toFloat()*r*.36f,cy+sin(hourAngle).toFloat()*r*.36f,p)
+   p.strokeWidth=r*.030f
+   c.drawLine(cx,cy,cx+cos(minuteAngle).toFloat()*r*.58f,cy+sin(minuteAngle).toFloat()*r*.58f,p)
+   p.strokeWidth=r*.012f
+   p.color=Color.rgb(110,55,30)
+   c.drawLine(cx,cy,cx+cos(secondAngle).toFloat()*r*.68f,cy+sin(secondAngle).toFloat()*r*.68f,p)
+   p.style=Paint.Style.FILL;p.color=Color.rgb(255,230,190);c.drawCircle(cx,cy,r*.055f,p)
    p.strokeCap=Paint.Cap.BUTT;p.style=Paint.Style.FILL;p.color=Color.WHITE
    c.drawCircle(cx-r*.95f,cy+r*.15f,r*.12f,p);c.drawCircle(cx+r*.95f,cy+r*.15f,r*.12f,p)
    p.color=Color.rgb(48,29,20);p.style=Paint.Style.STROKE;p.strokeWidth=r*.025f
