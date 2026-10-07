@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.CAMERA"/>
 
     <queries>
+        <package android:name="com.chess"/>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE"/>
         </intent>
@@ -19,6 +20,11 @@
         android:label="Miss Minutes"
         android:allowBackup="false"
         android:supportsRtl="true">
+
+        <activity
+            android:name=".ChessModeActivity"
+            android:screenOrientation="portrait"
+            android:exported="false" />
 
         <activity
             android:name=".MainActivity"
