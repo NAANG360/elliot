@@ -45,7 +45,7 @@ class MainActivity : Activity() {
   val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL};input=EditText(this).apply{hint="Speak, sugar...";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(false);setMaxLines(3)};row.addView(input,LinearLayout.LayoutParams(0,-2,1f));row.addView(Button(this).apply{text="↗";setOnClickListener{send()}},LinearLayout.LayoutParams(64,-2));root.addView(row)
   val tools=LinearLayout(this).apply{gravity=Gravity.CENTER}
   listOf("Memory","Brain","Wind Up").forEach{label->tools.addView(Button(this).apply{text=label;setOnClickListener{when(label){"Memory"->showMemory();"Brain"->installBrain();"Wind Up"->windUp()}}})}
-  tools.addView(Button(this).apply{text="VOICE";setOnClickListener{showVoicePicker()}})
+  tools.addView(Button(this).apply{text="VOICE";setOnClickListener{showVoicePicker()}})\n  tools.addView(Button(this).apply{text="VOICE LAB";setOnClickListener{showVoiceLab()}})
   root.addView(tools);setContentView(root)
   addMessage("MISS MINUTES","Well hello there, sugar! The native chronal core is awake. No WebView required.")
  }
@@ -80,33 +80,65 @@ class MainActivity : Activity() {
  private fun reply(rawText:String){handler.post{val text=cleanModelReply(rawText);character.speaking=voiceEnabled;addMessage("MISS MINUTES",text);if(voiceEnabled)voice.speak(text.take(700));handler.postDelayed({character.speaking=false;character.emotion="warm"},maxOf(900L,text.length*35L))}}
  private fun showVoicePicker(){
   val engines=voice.engineInfos()
-  val labels=engines.map{it.label.toString()+if(it.name==voice.enginePackage())"  ✓" else ""}.toTypedArray()
+  val custom=voice.customVoices()
   val items=ArrayList<String>()
-  items.add("TTS ENGINE")
-  items.addAll(labels.toList())
-  items.add("VOICE")
+  items.add("ANDROID TTS")
+  engines.forEach{items.add("  "+it.label.toString()+if(it.name==voice.enginePackage()&&voice.currentEngineLabel().startsWith("ANDROID"))"  ✓" else "")}
+  items.add("CUSTOM NEURAL")
+  custom.forEach{id->items.add("  "+id+if(voice.currentEngineLabel()=="CUSTOM NEURAL: "+id)"  ✓" else "")}
+  items.add("IMPORT CUSTOM VOICE")
   val builder=AlertDialog.Builder(this).setTitle("Miss Minutes Speech")
   builder.setItems(items.toTypedArray()){_,which->
-   if(which==0)return@setItems
-   if(which<=engines.size){
-    voice.selectEngine(engines[which-1].name)
-    reply("Speech engine set to "+engines[which-1].label+".")
-   }else showVoiceList()
+   when{
+    which==0->Unit
+    which in 1..engines.size->{
+     voice.selectAndroidEngine(engines[which-1].name)
+     reply("Speech engine set to "+engines[which-1].label+".")
+    }
+    which==engines.size+1->Unit
+    which in (engines.size+2)..(engines.size+1+custom.size)->{
+     val id=custom[which-(engines.size+2)]
+     if(voice.selectCustomVoice(id))reply("Custom neural voice loaded: "+id+".")
+    }
+    else->showVoiceLab()
+   }
   }.setNegativeButton("Android TTS settings"){_,_->startActivity(Intent(Settings.ACTION_TTS_SETTINGS))}
    .setPositiveButton(if(voiceEnabled)"VOICE ON" else "VOICE OFF"){_,_->voiceEnabled=!voiceEnabled;if(!voiceEnabled){voice.stop();character.speaking=false}}
    .show()
  }
- private fun showVoiceList(){
-  val names=voice.availableVoices().map{it.name}.toTypedArray()
-  if(names.isEmpty()){startActivity(Intent(Settings.ACTION_TTS_SETTINGS));return}
-  val current=voice.currentVoiceName()
-  val checked=names.indexOf(current).coerceAtLeast(0)
-  AlertDialog.Builder(this).setTitle("Voice: "+(voice.enginePackage() ?: "default"))
-   .setSingleChoiceItems(names,checked){dialog,which->
-    if(voice.selectVoice(names[which]))reply("Voice set to "+names[which]+".")
-    dialog.dismiss()
-   }.setNegativeButton("Back"){_,_->showVoicePicker()}
-   .show()
+ private fun showVoiceLab(){
+  val custom=voice.customVoices()
+  val labels=arrayOf(
+   "IMPORT PIPER VOICE FOLDER",
+   "VOICE ENGINE: "+voice.currentEngineLabel(),
+   "INSTALLED CUSTOM VOICES: "+custom.size,
+   "TRAINING PIPELINE / YOUTUBE SOURCES"
+  )
+  AlertDialog.Builder(this).setTitle("MISS MINUTES // VOICE LAB")
+   .setItems(labels){_,which->
+    when(which){
+     0->startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),9102)
+     1->showVoicePicker()
+     2->showVoicePicker()
+     3->{
+      reply("Voice Lab expects an authorized recording dataset. You can feed it your own recordings or source videos you are licensed to use; the training pipeline prepares WAV plus metadata, trains a neural voice, then exports the Android-ready voice bundle.")
+      startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://github.com/NAANG360/miss-minutes/tree/main/voice_lab")))
+     }
+    }
+   }.setNegativeButton("Close",null).show()
+ }
+ override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
+  super.onActivityResult(requestCode,resultCode,data)
+  if(requestCode!=9102||resultCode!=RESULT_OK||data?.data==null)return
+  val uri=data.data!!
+  try{contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION)}catch(_:Throwable){}
+  thread{
+   val result=voice.importCustomVoice(uri)
+   handler.post{
+    if(result.startsWith("Import failed")||result.startsWith("Could not")||result.startsWith("Voice folder"))reply(result)
+    else reply("Custom voice imported and ready: "+result+". Open VOICE to select it.")
+   }
+  }
  }
  private fun openAccessibility(){
   val component=ComponentName(this,MissMinutesAccessibilityService::class.java).flattenToString()
