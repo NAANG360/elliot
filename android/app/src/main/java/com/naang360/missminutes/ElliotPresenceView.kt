@@ -43,7 +43,7 @@ class ElliotPresenceView(context: Context) : View(context) {
 
         for (ring in 0..3) {
             val rr = radius * (0.66f + ring * .19f) * pulse
-            line.color = if (ring == 0) Color.argb(150, accent.red(), accent.green(), accent.blue()) else Color.argb(48 + ring * 9, 135, 178, 220)
+            line.color = if (ring == 0) Color.argb(150, Color.red(accent), Color.green(accent), Color.blue(accent)) else Color.argb(48 + ring * 9, 135, 178, 220)
             line.strokeWidth = if (ring == 0) 1.7f else 1f
             line.pathEffect = if (ring == 2) DashPathEffect(floatArrayOf(3f, 8f), -t * 12f) else null
             canvas.drawCircle(cx, cy, rr, line)
