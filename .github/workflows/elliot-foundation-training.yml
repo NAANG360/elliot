@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 350
     env:
       TRAIN_MINUTES: ${{ github.event.inputs.minutes || '120' }}
-      HF_HOME: ${{ runner.temp }}/hf-cache
+      HF_HOME: ${{ github.workspace }}/.hf-cache
       TOKENIZERS_PARALLELISM: "false"
     steps:
       - name: Checkout training source
