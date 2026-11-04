@@ -49,7 +49,7 @@ def main():
     p.add_argument("--data",required=True);p.add_argument("--out",required=True);p.add_argument("--steps",type=int,default=2000)
     p.add_argument("--batch",type=int,default=8);p.add_argument("--context",type=int,default=512);p.add_argument("--width",type=int,default=384)
     p.add_argument("--layers",type=int,default=6);p.add_argument("--heads",type=int,default=6);p.add_argument("--lr",type=float,default=3e-4)
-    p.add_argument("--seed",type=int,default=42);p.add_argument("--eval-every",type=int,default=200)
+    p.add_argument("--seed",type=int,default=42);p.add_argument("--eval-every",type=int,default=200);p.add_argument("--minutes",type=float,default=0);p.add_argument("--resume",action="store_true")
     a=p.parse_args(); random.seed(a.seed);torch.manual_seed(a.seed)
     out=Path(a.out);out.mkdir(parents=True,exist_ok=True)
     raw=Path(a.data).read_text(encoding="utf-8"); ids=ByteTokenizer().encode(raw)
@@ -59,8 +59,8 @@ def main():
     device="cuda" if torch.cuda.is_available() else "cpu"
     model=ElliotMini(a.width,a.layers,a.heads,a.context).to(device)
     opt=torch.optim.AdamW(model.parameters(),lr=a.lr,betas=(.9,.95),weight_decay=.1)
-    best=float("inf"); started=time.time()
-    for step in range(1,a.steps+1):
+    best=float("inf"); started=time.time(); start_step=0\n    checkpoint=out/"model.pt"\n    if a.resume and checkpoint.is_file():\n        saved=torch.load(checkpoint,map_location=device,weights_only=False)\n        model.load_state_dict(saved["model"])\n        if "optimizer" in saved: opt.load_state_dict(saved["optimizer"])\n        start_step=int(saved.get("step",0)); best=float(saved.get("best_validation_loss",best))\n        print(json.dumps({"resume_step":start_step,"best_validation_loss":best}))
+    for step in range(start_step+1,a.steps+1):\n        if a.minutes>0 and (time.time()-started)>=a.minutes*60: break
         model.train(); xb,yb=batches(train,a.batch,a.context,device); _,loss=model(xb,yb)
         opt.zero_grad(set_to_none=True);loss.backward();torch.nn.utils.clip_grad_norm_(model.parameters(),1.0);opt.step()
         if step%a.eval_every==0 or step==a.steps:
@@ -69,10 +69,10 @@ def main():
                 vals=[model(*batches(val,min(a.batch,4),a.context,device))[1].item() for _ in range(8)]
             score=sum(vals)/len(vals); print(json.dumps({"step":step,"train_loss":loss.item(),"val_loss":score,"device":device}))
             if score<best:
-                best=score;torch.save({"model":model.state_dict(),"step":step,"config":{"width":a.width,"layers":a.layers,"heads":a.heads,"context":a.context,"vocab_size":256}},out/"model.pt")
+                best=score;torch.save({"model":model.state_dict(),"optimizer":opt.state_dict(),"step":step,"best_validation_loss":best,"config":{"width":a.width,"layers":a.layers,"heads":a.heads,"context":a.context,"vocab_size":256}},checkpoint)
     config={"family":"elliot-byte-transformer-v0","width":a.width,"layers":a.layers,"heads":a.heads,"context":a.context,"vocab_size":256,"initialization":"random","pretrained_weights":False}
     (out/"config.json").write_text(json.dumps(config,indent=2))
     (out/"tokenizer.json").write_text(json.dumps({"type":"utf8-byte","vocab_size":256},indent=2))
-    (out/"training.json").write_text(json.dumps({"steps":a.steps,"best_validation_loss":best,"seconds":time.time()-started,"device":device,"seed":a.seed,"source":str(Path(a.data).name)},indent=2))
+    (out/"training.json").write_text(json.dumps({"steps_completed":start_step + (step-start_step if "step" in locals() else 0),"target_steps":a.steps,"best_validation_loss":best,"seconds":time.time()-started,"device":device,"seed":a.seed,"source":str(Path(a.data).name)},indent=2))
     print("Saved best from-scratch checkpoint:",out/"model.pt")
 if __name__=="__main__": main()
