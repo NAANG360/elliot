@@ -29,6 +29,7 @@ class ElliotActivity : Activity() {
     private lateinit var input: EditText
     private lateinit var brain: FrameworkBridge
     private lateinit var memory: NativeChronalMemory
+    private lateinit var osint: ElliotOsint
     private lateinit var voice: VoiceBackend
     private val handler = Handler(Looper.getMainLooper())
     private var generation = 0L
@@ -42,6 +43,7 @@ class ElliotActivity : Activity() {
         window.decorView.systemUiVisibility = 0
         brain = FrameworkBridge(filesDir.resolve("framework"), this)
         memory = NativeChronalMemory(this)
+        osint = ElliotOsint(this)
         voice = VoiceBackend(this)
         buildInterface()
         addMessage("ELLIOT", "Good evening. I'm online, and your local memory is intact.")
@@ -164,7 +166,8 @@ class ElliotActivity : Activity() {
                 val traces = memory.recall("", 18)
                 reply(if (traces.isEmpty()) "I don't have a relevant memory recorded yet." else traces.joinToString("\n• ", "Here's what I found in your memory:\n• "))
             }
-            q == "install brain" || q == "download model" -> installBrain()
+            q == "briefing" || q.contains("daily briefing") || q == "intelligence briefing" -> { setActivity("BUILDING INTELLIGENCE BRIEF", ElliotPresenceView.State.SEARCHING); thread { val brief=osint.briefing(); handler.post { reply(brief) } } }
+            q == "refresh osint" || q.contains("refresh intelligence") || q == "update intelligence" -> { setActivity("COLLECTING PUBLIC INTELLIGENCE", ElliotPresenceView.State.SEARCHING); thread { val added=osint.refresh(); handler.post { reply("Intelligence refresh complete. Added " + added.size + " new public-source items. Say briefing to review the archive.") } } }
             q == "import model" || q == "use my model" -> chooseLocalModel()
             q.contains("memory status") || q == "memory" -> reply("Your private on-device memory contains ${memory.count()} traces and ${memory.mutationCount()} recorded mutations.")
             q.contains("voice off") -> { voiceEnabled = false; voice.stop(); reply("Voice output is off.") }
@@ -185,7 +188,7 @@ class ElliotActivity : Activity() {
         val modelPath = brain.modelPath()
         if (modelPath.isBlank()) {
             setActivity("INSTALLING LOCAL LANGUAGE MODEL", ElliotPresenceView.State.EXECUTING)
-            reply("My local language model isn't installed yet. Say 'install brain' and I'll download the verified starter model.")
+            reply("My from-scratch foundation model is still under development. I will not silently substitute a pretrained model. Importing a compatible GGUF is available only for temporary runtime testing.")
             return
         }
         setActivity("RETRIEVING RELEVANT MEMORY", ElliotPresenceView.State.THINKING)
@@ -286,16 +289,6 @@ class ElliotActivity : Activity() {
                     reply("I couldn't import that model: " + (t.message ?: "unknown error"))
                 }
             }
-        }
-    }
-
-    private fun installBrain() {
-        if (brain.modelPath().isNotBlank()) { reply("The local model is already installed. I won't replace it without your approval."); return }
-        setActivity("DOWNLOADING VERIFIED MODEL", ElliotPresenceView.State.EXECUTING)
-        reply("I'm downloading the verified starter model. This may take a little while.")
-        thread {
-            brain.installBaseModel { status -> handler.post { setActivity(status.uppercase(), ElliotPresenceView.State.EXECUTING) } }
-            handler.post { setActivity(if (brain.modelPath().isNotBlank()) "LOCAL MODEL READY" else "MODEL INSTALL FAILED", if (brain.modelPath().isNotBlank()) ElliotPresenceView.State.IDLE else ElliotPresenceView.State.ERROR) }
         }
     }
 
