@@ -32,6 +32,7 @@ class ElliotActivity : Activity() {
     private lateinit var voice: VoiceBackend
     private val handler = Handler(Looper.getMainLooper())
     private var generation = 0L
+    @Volatile private var generationJob: String? = null
     private var voiceEnabled = true
 
     override fun onCreate(state: Bundle?) {
@@ -142,6 +143,7 @@ class ElliotActivity : Activity() {
         val text = input.text.toString().trim()
         if (text.isBlank()) return
         input.text.clear()
+        generationJob?.let { NativeBrain.cancel(it) }; generationJob = null
         generation++
         val token = generation
         voice.stop()
@@ -199,11 +201,32 @@ class ElliotActivity : Activity() {
                 append(userText.take(1400))
                 append("\nASSISTANT RESPONSE\n")
             }
-            val result = NativeBrain.generate(modelPath, prompt)
-            handler.post {
-                if (token == generation) {
-                    memory.remember(result, "assistant-response", .22, type = "episode")
-                    reply(result)
+            handler.post { if (token == generation) setActivity("RUNNING LOCAL INFERENCE", ElliotPresenceView.State.THINKING) }
+            val job = NativeBrain.start(modelPath, prompt)
+            generationJob = job
+            var result = ""
+            while (token == generation) {
+                val packet = NativeBrain.poll(job)
+                val split = packet.indexOf('\\n')
+                val status = if (split < 0) packet else packet.substring(0, split)
+                val partial = if (split < 0) "" else packet.substring(split + 1)
+                if (status == "RUNNING") {
+                    handler.post {
+                        if (token == generation) setActivity("GENERATING RESPONSE · ${partial.length} CHARS", ElliotPresenceView.State.THINKING)
+                    }
+                    Thread.sleep(110)
+                } else {
+                    result = if (status == "DONE" || status == "ERROR") partial else packet
+                    break
+                }
+            }
+            if (token == generation) {
+                generationJob = null
+                handler.post {
+                    if (token == generation) {
+                        memory.remember(result, "assistant-response", .22, type = "episode")
+                        reply(result)
+                    }
                 }
             }
         }
