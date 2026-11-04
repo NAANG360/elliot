@@ -74,7 +74,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Notify owner only after all quality gates pass
-        if: success() && env.NOTIFY_EMAIL != ''
+        if: success() && secrets.NOTIFY_EMAIL != ''
+        env:
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
         uses: dawidd6/action-send-mail@v4
         with:
           server_address: ${{ secrets.SMTP_SERVER }}
