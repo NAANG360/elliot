@@ -156,7 +156,7 @@ class ElliotActivity : Activity() {
             q.contains("what do you remember") -> {
                 setActivity("RETRIEVING PERSONAL MEMORY", ElliotPresenceView.State.EXECUTING)
                 val traces = memory.recall(text.removePrefix("what do you remember"), 18)
-                reply(if (traces.isEmpty()) "I don't have a relevant memory recorded yet." else traces.joinToString("\\n• ", "Here's what I found in your memory:\\n• "))
+                reply(if (traces.isEmpty()) "I don't have a relevant memory recorded yet." else traces.joinToString("\n• ", "Here's what I found in your memory:\n• "))
             }
             q == "install brain" || q == "download model" -> installBrain()
             q.contains("memory status") || q == "memory" -> reply("Your private on-device memory contains ${memory.count()} traces and ${memory.mutationCount()} recorded mutations.")
@@ -185,14 +185,14 @@ class ElliotActivity : Activity() {
         thread {
             val recalled = memory.recall(userText, 12)
             val prompt = buildString {
-                append("<|im_start|>system\\n")
-                append("You are Elliot, a capable, personable personal AI assistant. Your identity is ELLIOT: Evolving Learning Logical Intelligence for Operations and Thinking. Be sophisticated, warm, concise, witty when appropriate, technically capable, honest about uncertainty, and proactive without being pushy. You run locally on an Android phone. Never claim consciousness, hidden access, or completed actions you did not perform. Do not reveal private chain-of-thought; provide concise conclusions and brief explanations instead. Financial transactions, purchases, subscriptions, destructive actions, and consequential external commitments require explicit user authorization.\\n")
-                append("LONG-TERM MEMORY (relevant retrieved traces):\\n")
-                append(recalled.joinToString("\\n") { "- " + it.take(1200) })
-                append("\\nRECENT CONTEXT: This conversation is stored in the local chronal archive.\\n")
-                append("<|im_end|>\\n<|im_start|>user\\n")
+                append("SYSTEM INSTRUCTIONS\n")
+                append("You are Elliot, a capable, personable personal AI assistant. Your identity is ELLIOT: Evolving Learning Logical Intelligence for Operations and Thinking. Be sophisticated, warm, concise, witty when appropriate, technically capable, honest about uncertainty, and proactive without being pushy. You run locally on an Android phone. Never claim consciousness, hidden access, or completed actions you did not perform. Do not reveal private chain-of-thought; provide concise conclusions and brief explanations instead. Financial transactions, purchases, subscriptions, destructive actions, and consequential external commitments require explicit user authorization.\n")
+                append("LONG-TERM MEMORY (relevant retrieved traces):\n")
+                append(recalled.joinToString("\n") { "- " + it.take(1200) })
+                append("\nRECENT CONTEXT: This conversation is stored in the local chronal archive.\n")
+                append("\nUSER REQUEST\n")
                 append(userText.take(3000))
-                append("\\n<|im_end|>\\n<|im_start|>assistant\\n")
+                append("\nASSISTANT RESPONSE\n")
             }
             val result = NativeBrain.generate(modelPath, prompt)
             handler.post {
@@ -215,7 +215,7 @@ class ElliotActivity : Activity() {
         setActivity("SEARCHING THE WEB", ElliotPresenceView.State.SEARCHING)
         thread {
             val results = brain.search(query)
-            handler.post { reply(if (results.isBlank()) "The search returned no useful results." else "Here's what I found:\\n" + results) }
+            handler.post { reply(if (results.isBlank()) "The search returned no useful results." else "Here's what I found:\n" + results) }
         }
     }
 
