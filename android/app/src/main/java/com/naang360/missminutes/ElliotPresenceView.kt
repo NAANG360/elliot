@@ -17,8 +17,8 @@ class ElliotPresenceView(context: Context) : View(context) {
     private val bg = Paint(Paint.ANTI_ALIAS_FLAG)
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(185, 198, 215); textSize = 11f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); letterSpacing = .18f }
-    private val title = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 31f; typeface = Typeface.create("sans-serif-light", Typeface.NORMAL); letterSpacing = .12f }
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(185, 198, 215); textSize = 11f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) }
+    private val title = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 31f; typeface = Typeface.create("sans-serif-light", Typeface.NORMAL) }
     private val cyan = Color.rgb(106, 222, 255)
     private val violet = Color.rgb(154, 132, 255)
     private val white = Color.rgb(225, 241, 255)
