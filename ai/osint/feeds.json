@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "refresh_minutes": 360,
+  "max_items_per_feed": 30,
+  "feeds": [
+    {"id":"github-blog","category":"software","publisher":"GitHub Blog","url":"https://github.blog/feed/"},
+    {"id":"github-changelog","category":"software","publisher":"GitHub Changelog","url":"https://github.blog/changelog/feed/"},
+    {"id":"arxiv-cs-ai","category":"ai-research","publisher":"arXiv cs.AI","url":"https://rss.arxiv.org/rss/cs.AI"},
+    {"id":"arxiv-cs-lg","category":"ai-research","publisher":"arXiv cs.LG","url":"https://rss.arxiv.org/rss/cs.LG"},
+    {"id":"google-security","category":"cybersecurity","publisher":"Google Security Blog","url":"https://security.googleblog.com/feeds/posts/default"},
+    {"id":"krebsonsecurity","category":"cybersecurity","publisher":"Krebs on Security","url":"https://krebsonsecurity.com/feed/"}
+  ]
+}
