@@ -17,7 +17,7 @@
 
     <application
         android:theme="@style/AppTheme"
-        android:label="Miss Minutes"
+        android:label="Elliot"
         android:allowBackup="false"
         android:supportsRtl="true">
 
@@ -27,7 +27,7 @@
             android:exported="false" />
 
         <activity
-            android:name=".MainActivity"
+            android:name=".ElliotActivity"
             android:screenOrientation="portrait"
             android:exported="true">
             <intent-filter>
