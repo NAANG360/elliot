@@ -1,6 +1,11 @@
 name: Elliot continuous foundation training
 
 on:
+  push:
+    branches: [feature/elliot-native-interface]
+    paths:
+      - 'ai/train/**'
+      - '.github/workflows/elliot-training.yml'
   workflow_dispatch:
     inputs:
       minutes:
