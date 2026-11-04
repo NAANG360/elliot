@@ -207,7 +207,7 @@ class ElliotActivity : Activity() {
             var result = ""
             while (token == generation) {
                 val packet = NativeBrain.poll(job)
-                val split = packet.indexOf('\\n')
+                val split = packet.indexOf('\n')
                 val status = if (split < 0) packet else packet.substring(0, split)
                 val partial = if (split < 0) "" else packet.substring(split + 1)
                 if (status == "RUNNING") {
