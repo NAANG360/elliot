@@ -1,7 +1,7 @@
 name: Android APK
 on:
   push:
-    branches: [main]
+    branches: [main, 'feature/**']
   workflow_dispatch:
 jobs:
   build:
@@ -30,5 +30,5 @@ jobs:
         run: gradle :app:assembleRelease --no-daemon --stacktrace
       - uses: actions/upload-artifact@v6
         with:
-          name: miss-minutes-0.8.1-apk
+          name: elliot-0.9.0-apk
           path: android/app/build/outputs/apk/release/app-release.apk
