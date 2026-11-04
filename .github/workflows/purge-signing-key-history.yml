@@ -1,0 +1,33 @@
+name: Purge exposed signing keystore from Git history
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Rewrite all branches and tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone --mirror "https://x-access-token:${GH_TOKEN}@github.com/NAANG360/elliot.git" repo.git
+          cd repo.git
+          git config user.name "Elliot Repository Maintenance"
+          git config user.email "actions@users.noreply.github.com"
+          python -m pip install --user git-filter-repo
+          export PATH="$HOME/.local/bin:$PATH"
+          git filter-repo --force --path android/app/miss-minutes-release.jks.b64 --invert-paths
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/NAANG360/elliot.git"
+          git push --force --all origin
+          git push --force --tags origin
+          if git rev-list --objects --all | grep -F 'android/app/miss-minutes-release.jks.b64'; then
+            echo "ERROR: signing keystore path still reachable"
+            exit 1
+          fi
+          echo "Branch and tag histories no longer reference the keystore path."
