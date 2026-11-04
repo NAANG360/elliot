@@ -188,15 +188,15 @@ class ElliotActivity : Activity() {
         }
         setActivity("RETRIEVING RELEVANT MEMORY", ElliotPresenceView.State.THINKING)
         thread {
-            val recalled = memory.recall(userText, 12)
+            val recalled = memory.recall(userText, 6)
             val prompt = buildString {
                 append("SYSTEM INSTRUCTIONS\n")
                 append("You are Elliot, a capable, personable personal AI assistant. Your identity is ELLIOT: Evolving Learning Logical Intelligence for Operations and Thinking. Be sophisticated, warm, concise, witty when appropriate, technically capable, honest about uncertainty, and proactive without being pushy. You run locally on an Android phone. Never claim consciousness, hidden access, or completed actions you did not perform. Do not reveal private chain-of-thought; provide concise conclusions and brief explanations instead. Financial transactions, purchases, subscriptions, destructive actions, and consequential external commitments require explicit user authorization.\n")
                 append("LONG-TERM MEMORY (relevant retrieved traces):\n")
-                append(recalled.joinToString("\n") { "- " + it.take(1200) })
+                append(recalled.joinToString("\n") { "- " + it.take(450) })
                 append("\nRECENT CONTEXT: This conversation is stored in the local chronal archive.\n")
                 append("\nUSER REQUEST\n")
-                append(userText.take(3000))
+                append(userText.take(1400))
                 append("\nASSISTANT RESPONSE\n")
             }
             val result = NativeBrain.generate(modelPath, prompt)
