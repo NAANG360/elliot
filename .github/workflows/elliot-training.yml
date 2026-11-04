@@ -28,6 +28,7 @@ jobs:
       TRAIN_MINUTES: ${{ github.event.inputs.minutes || '55' }}
       HF_HOME: ${{ runner.temp }}/hf-cache
       TOKENIZERS_PARALLELISM: "false"
+      NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -74,7 +75,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Notify owner only after all quality gates pass
-        if: success() && secrets.NOTIFY_EMAIL != ''
+        if: success() && env.NOTIFY_EMAIL != ''
         env:
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
         uses: dawidd6/action-send-mail@v4
