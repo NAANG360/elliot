@@ -3,42 +3,25 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 android {
-    namespace="com.naang360.missminutes"
-    compileSdk=36
+    namespace = "com.naang360.missminutes"
+    compileSdk = 36
     defaultConfig {
-        applicationId="com.naang360.missminutes"
-        minSdk=28
-        targetSdk=36
-        versionCode=57
-        versionName="0.9.0"
+        applicationId = "com.naang360.missminutes"
+        minSdk = 28
+        targetSdk = 36
+        versionCode = 57
+        versionName = "0.9.0"
         ndk { abiFilters += listOf("arm64-v8a") }
     }
     compileOptions {
-        sourceCompatibility=JavaVersion.VERSION_17
-        targetCompatibility=JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
-    signingConfigs {
-        create("release") {
-            storeFile=file("miss-minutes-release.jks")
-            storePassword="***REMOVED***"
-            keyAlias="missminutes"
-            keyPassword="***REMOVED***"
-        }
-    }
-    buildTypes {
-        release {
-            isMinifyEnabled=false
-            signingConfig=signingConfigs.getByName("release")
-        }
-    }
-    externalNativeBuild { cmake { path=file("src/main/cpp/CMakeLists.txt") } }
+    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt") } }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
-
+}
 dependencies {
     implementation("androidx.documentfile:documentfile:1.1.0")
     implementation(files("libs/sherpa-onnx-1.13.8.aar"))
 }
-}
-kotlin {
-    jvmToolchain(17)
-}
+kotlin { jvmToolchain(17) }
