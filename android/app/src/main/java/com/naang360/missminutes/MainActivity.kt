@@ -181,12 +181,28 @@ class MainActivity : Activity() {
  override fun onDestroy(){voice.shutdown();brain.shutdown();super.onDestroy()}
 }
 
-class FrameworkBridge(private val root:File,private val activity:MainActivity){
- companion object{private const val URL_BASE="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/df5bf01389a39c743ab467d734bf501681e041c5/qwen2.5-0.5b-instruct-q4_k_m.gguf?download=true";private const val NAME="qwen2.5-0.5b-instruct-q4_k_m.gguf";private const val HASH="74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db"}
- init{root.mkdirs();File(root,"models").mkdirs()}
- fun modelPath():String{val name=File(root,"active-model.txt").takeIf{it.exists()}?.readText()?.trim()?:NAME;val f=File(root,"models/"+name);return if(f.exists()&&f.length()>1024*1024)f.absolutePath else ""}
- fun installBaseModel(report:(String)->Unit){val target=File(root,"models/"+NAME);if(target.exists()&&target.length()>450L*1024*1024){File(root,"active-model.txt").writeText(NAME);report("Starter brain already installed.");return};val part=File(root,"models/"+NAME+".part");try{var offset=if(part.exists())part.length()else 0L;val c=(URL(URL_BASE).openConnection()as HttpURLConnection).apply{connectTimeout=30000;readTimeout=120000;instanceFollowRedirects=true;if(offset>0)setRequestProperty("Range","bytes="+offset+"-")};c.connect();if(c.responseCode !in 200..299)error("HTTP "+c.responseCode);if(offset>0&&c.responseCode==200){part.delete();offset=0};c.inputStream.use{input->FileOutputStream(part,offset>0).use{out->val buf=ByteArray(1024*1024);var total=offset;while(true){val n=input.read(buf);if(n<=0)break;out.write(buf,0,n);total+=n;if(total%(20L*1024*1024)<1024*1024)report("Downloaded "+total/1024/1024+" MB")}}};c.disconnect();if(part.length()<450L*1024*1024)error("Download ended early");val md=MessageDigest.getInstance("SHA-256");part.inputStream().use{input->val buf=ByteArray(1024*1024);while(true){val n=input.read(buf);if(n<=0)break;md.update(buf,0,n)}};val actual=md.digest().joinToString(""){String.format("%02x",it)};if(actual!=HASH)error("Checksum mismatch");if(target.exists())target.delete();if(!part.renameTo(target)){part.copyTo(target,true);part.delete()};File(root,"active-model.txt").writeText(NAME);report("Starter brain ready.")}catch(t:Throwable){report("Brain install failed: "+t.message)}}
- fun openUrl(url:String){try{val u=Uri.parse(url);if(u.scheme!="http"&&u.scheme!="https")return;activity.startActivity(Intent(Intent.ACTION_VIEW,u))}catch(_:Throwable){}}
- fun search(query:String):String{try{val enc=URLEncoder.encode(query.take(200),"UTF-8");val c=(URL("https://html.duckduckgo.com/html/?q="+enc).openConnection()as HttpURLConnection).apply{connectTimeout=8000;readTimeout=10000;setRequestProperty("User-Agent","MissMinutes/0.8.2")};val html=c.inputStream.bufferedReader().use{it.readText()};c.disconnect();val p=Regex("""<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>""",RegexOption.IGNORE_CASE);return p.findAll(html).take(5).joinToString("\n\n"){m->android.text.Html.fromHtml(m.groupValues[2],android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()+"\n"+m.groupValues[1]}}catch(t:Throwable){return "Search failed: "+t.message}}
+class FrameworkBridge(private val root:File,private val activity:Activity){
+ init { root.mkdirs(); File(root,"models").mkdirs() }
+ fun modelPath():String {
+  val name=File(root,"active-model.txt").takeIf{it.exists()}?.readText()?.trim() ?: return ""
+  val f=File(root,"models/"+name)
+  return if(f.isFile && f.length()>1024*1024) f.absolutePath else ""
+ }
+ fun openUrl(url:String){
+  try { val u=Uri.parse(url); if(u.scheme=="http"||u.scheme=="https") activity.startActivity(Intent(Intent.ACTION_VIEW,u)) } catch(_:Throwable) {}
+ }
+ fun search(query:String):String {
+  try {
+   val enc=URLEncoder.encode(query.take(200),"UTF-8")
+   val c=(URL("https://html.duckduckgo.com/html/?q="+enc).openConnection() as HttpURLConnection).apply {
+    connectTimeout=8000;readTimeout=10000;setRequestProperty("User-Agent","ElliotOSINT/0.1")
+   }
+   val html=c.inputStream.bufferedReader().use{it.readText()};c.disconnect()
+   val pattern=Regex("""<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>""",RegexOption.IGNORE_CASE)
+   return pattern.findAll(html).take(5).joinToString("\n\n"){m ->
+    android.text.Html.fromHtml(m.groupValues[2],android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()+"\n"+m.groupValues[1]
+   }
+  } catch(t:Throwable) { return "Search failed: "+t.message }
+ }
  fun shutdown(){NativeBrain.releaseModel()}
 }
