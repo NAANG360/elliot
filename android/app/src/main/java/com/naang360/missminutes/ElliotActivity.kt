@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
+import java.io.File
+import java.io.FileOutputStream
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -131,6 +133,8 @@ class ElliotActivity : Activity() {
         if (requestCode == 9201 && resultCode == RESULT_OK) {
             val spoken = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
             if (spoken.isNotBlank()) { input.setText(spoken); send() }
+        } else if (requestCode == 9202 && resultCode == RESULT_OK && data?.data != null) {
+            importLocalModel(data.data!!)
         }
     }
 
@@ -159,6 +163,7 @@ class ElliotActivity : Activity() {
                 reply(if (traces.isEmpty()) "I don't have a relevant memory recorded yet." else traces.joinToString("\n• ", "Here's what I found in your memory:\n• "))
             }
             q == "install brain" || q == "download model" -> installBrain()
+            q == "import model" || q == "use my model" -> chooseLocalModel()
             q.contains("memory status") || q == "memory" -> reply("Your private on-device memory contains ${memory.count()} traces and ${memory.mutationCount()} recorded mutations.")
             q.contains("voice off") -> { voiceEnabled = false; voice.stop(); reply("Voice output is off.") }
             q.contains("voice on") -> { voiceEnabled = true; reply("Voice output is on.") }
@@ -216,6 +221,48 @@ class ElliotActivity : Activity() {
         thread {
             val results = brain.search(query)
             handler.post { reply(if (results.isBlank()) "The search returned no useful results." else "Here's what I found:\n" + results) }
+        }
+    }
+
+
+    private fun chooseLocalModel() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/octet-stream", "application/x-gguf"))
+        }
+        try { startActivityForResult(intent, 9202) }
+        catch (_: Throwable) { reply("Android couldn't open the model picker.") }
+    }
+
+    private fun importLocalModel(uri: Uri) {
+        setActivity("IMPORTING LOCAL GGUF MODEL", ElliotPresenceView.State.EXECUTING)
+        thread {
+            try {
+                val directory = File(filesDir, "framework/models").apply { mkdirs() }
+                val name = (uri.lastPathSegment ?: "elliot-model.gguf").substringAfterLast('/').replace(Regex("[^A-Za-z0-9._-]"), "_").take(100)
+                require(name.endsWith(".gguf", true)) { "Choose a GGUF model file." }
+                val target = File(directory, name)
+                val temporary = File(directory, "$name.importing")
+                contentResolver.openInputStream(uri)?.use { source ->
+                    FileOutputStream(temporary).use { sink -> source.copyTo(sink, 1024 * 1024) }
+                } ?: error("Android could not read that file.")
+                require(temporary.length() > 50L * 1024 * 1024) { "That file is too small to be a language model." }
+                val header = ByteArray(4)
+                temporary.inputStream().use { require(it.read(header) == 4 && String(header, Charsets.US_ASCII) == "GGUF") { "The file does not have a valid GGUF header." } }
+                if (target.exists()) target.delete()
+                check(temporary.renameTo(target)) { "Could not move the imported model into private storage." }
+                File(filesDir, "framework/active-model.txt").writeText(name)
+                handler.post {
+                    setActivity("LOCAL MODEL READY", ElliotPresenceView.State.IDLE)
+                    reply("The GGUF model is imported and selected. I'll use it locally. Performance depends on its size and your phone's available memory.")
+                }
+            } catch (t: Throwable) {
+                handler.post {
+                    setActivity("MODEL IMPORT FAILED", ElliotPresenceView.State.ERROR)
+                    reply("I couldn't import that model: " + (t.message ?: "unknown error"))
+                }
+            }
         }
     }
 
