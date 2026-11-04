@@ -1,34 +1,41 @@
 name: Android APK
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-24.04
-    permissions: { contents: read }
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: feature/elliot-native-interface
       - uses: actions/setup-java@v5
-        with: { distribution: temurin, java-version: "17" }
+        with:
+          distribution: temurin
+          java-version: "17"
       - uses: android-actions/setup-android@v4
       - name: Install Android SDK
-        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
       - uses: gradle/actions/setup-gradle@v4
-        with: { gradle-version: "8.13" }
+        with:
+          gradle-version: "8.13"
       - name: Fetch local inference engine
         run: git clone --depth 1 https://github.com/ggml-org/llama.cpp.git android/app/src/main/cpp/llama.cpp
       - name: Fetch sherpa-onnx Android runtime
         run: |
           mkdir -p android/app/libs
           curl -L --fail --retry 3 -o android/app/libs/sherpa-onnx-1.13.8.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar
-      - name: Restore stable release signing key
-        run: |
-          base64 -d android/app/miss-minutes-release.jks.b64 > android/app/miss-minutes-release.jks
-          chmod 600 android/app/miss-minutes-release.jks
-      - name: Build signed release APK
-        run: gradle :app:assembleRelease --no-daemon --stacktrace
+      - name: Build installable debug APK
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
       - uses: actions/upload-artifact@v6
         with:
-          name: miss-minutes-0.8.1-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          name: elliot-0.9.0-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
