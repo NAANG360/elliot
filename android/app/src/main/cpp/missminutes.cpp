@@ -141,10 +141,11 @@ Java_com_naang360_missminutes_NativeBrain_startGenerationNative(JNIEnv* env,jcla
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_naang360_missminutes_NativeBrain_pollGenerationNative(JNIEnv* env,jclass,jstring jid){
-    const char* id=env->GetStringUTFChars(jid,nullptr);std::shared_ptr<Job> job;
-    {std::lock_guard<std::mutex> lock(jobs_mutex);auto it=jobs.find(id?std::string(id):"");if(it!=jobs.end())job=it->second;}
-    if(id)env->ReleaseStringUTFChars(jid,id);
+    const char* id=env->GetStringUTFChars(jid,nullptr);
     const std::string key=id?std::string(id):"";
+    std::shared_ptr<Job> job;
+    {std::lock_guard<std::mutex> lock(jobs_mutex);auto it=jobs.find(key);if(it!=jobs.end())job=it->second;}
+    if(id)env->ReleaseStringUTFChars(jid,id);
     if(!job)return env->NewStringUTF("ERROR\nUnknown generation job.");
     std::string response;
     bool complete=false;
@@ -169,9 +170,12 @@ Java_com_naang360_missminutes_NativeBrain_pollGenerationNative(JNIEnv* env,jclas
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_naang360_missminutes_NativeBrain_cancelGenerationNative(JNIEnv* env,jclass,jstring jid){
-    const char* id=env->GetStringUTFChars(jid,nullptr);std::shared_ptr<Job> job;
-    {std::lock_guard<std::mutex> lock(jobs_mutex);auto it=jobs.find(id?std::string(id):"");if(it!=jobs.end())job=it->second;}
-    if(id)env->ReleaseStringUTFChars(jid,id);if(job)job->cancel.store(true);
+    const char* id=env->GetStringUTFChars(jid,nullptr);
+    const std::string key=id?std::string(id):"";
+    std::shared_ptr<Job> job;
+    {std::lock_guard<std::mutex> lock(jobs_mutex);auto it=jobs.find(key);if(it!=jobs.end())job=it->second;}
+    if(id)env->ReleaseStringUTFChars(jid,id);
+    if(job)job->cancel.store(true);
 }
 
     
