@@ -161,7 +161,7 @@ class ElliotActivity : Activity() {
             }
             q.contains("what do you remember") -> {
                 setActivity("RETRIEVING PERSONAL MEMORY", ElliotPresenceView.State.EXECUTING)
-                val traces = memory.recall(text.removePrefix("what do you remember"), 18)
+                val traces = memory.recall("", 18)
                 reply(if (traces.isEmpty()) "I don't have a relevant memory recorded yet." else traces.joinToString("\n• ", "Here's what I found in your memory:\n• "))
             }
             q == "install brain" || q == "download model" -> installBrain()
