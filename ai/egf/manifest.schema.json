@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elliot.local/spec/egf-manifest-0.1.schema.json",
+  "title": "Elliot Growth Format manifest",
+  "type": "object",
+  "required": ["format","format_version","model_id","model_version","architecture","tokenizer","core","adapters","knowledge_packs","compatibility","provenance","evaluation"],
+  "properties": {
+    "format": {"const":"EGF"},
+    "format_version": {"type":"string","pattern":"^0\\.1\\.\\d+$"},
+    "model_id": {"type":"string","minLength":1},
+    "model_version": {"type":"string","minLength":1},
+    "architecture": {"type":"object","required":["family","config","fingerprint"],"properties":{"family":{"type":"string"},"config":{"type":"string"},"fingerprint":{"type":"string","pattern":"^[a-f0-9]{64}$"}}},
+    "tokenizer": {"$ref":"#/$defs/payload"},
+    "core": {"$ref":"#/$defs/payload"},
+    "adapters": {"type":"array","items":{"type":"object","required":["id","base_version","payload","targets"],"properties":{"id":{"type":"string"},"base_version":{"type":"string"},"payload":{"$ref":"#/$defs/payload"},"targets":{"type":"array","items":{"type":"string"}}}}},
+    "knowledge_packs": {"type":"array","items":{"type":"object","required":["id","index"],"properties":{"id":{"type":"string"},"index":{"$ref":"#/$defs/payload"}}}},
+    "compatibility": {"type":"object","required":["min_runtime","abis"],"properties":{"min_runtime":{"type":"string"},"abis":{"type":"array","items":{"type":"string"}}}},
+    "provenance": {"type":"object","required":["training_record","dataset_record"],"properties":{"training_record":{"$ref":"#/$defs/payload"},"dataset_record":{"$ref":"#/$defs/payload"}}},
+    "evaluation": {"type":"object","required":["suite","results"],"properties":{"suite":{"type":"string"},"results":{"$ref":"#/$defs/payload"}}}
+  },
+  "$defs":{"payload":{"type":"object","required":["path","size","sha256"],"properties":{"path":{"type":"string","pattern":"^(?!/)(?!.*\\.\\.).+$"},"size":{"type":"integer","minimum":0},"sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"}}}}
+}
