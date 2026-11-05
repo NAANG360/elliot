@@ -1,0 +1,49 @@
+name: Elliot checkpoint conversation probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      training_run_id:
+        description: "Successful foundation training run ID"
+        required: true
+        default: "41872122248"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Elliot training source
+        uses: actions/checkout@v4
+        with:
+          ref: feature/elliot-native-interface
+      - name: Download published checkpoint
+        uses: actions/download-artifact@v4
+        with:
+          name: elliot-foundation-2
+          repository: NAANG360/elliot
+          run-id: INPUT_RUN_ID
+          github-token: GITHUB_TOKEN_VALUE
+          path: training-state
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU inference dependency
+        run: python -m pip install torch
+      - name: Generate raw conversation probes
+        run: |
+          python ai/train/probe_checkpoint.py \
+            --checkpoint training-state/model/model.pt \
+            --output elliot-conversation-probe.md \
+            --new-bytes 240
+      - name: Publish conversation transcript
+        uses: actions/upload-artifact@v4
+        with:
+          name: elliot-conversation-probe
+          path: elliot-conversation-probe.md
+          retention-days: 30
