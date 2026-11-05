@@ -26,8 +26,8 @@ jobs:
         with:
           name: elliot-foundation-2
           repository: NAANG360/elliot
-          run-id: INPUT_RUN_ID
-          github-token: GITHUB_TOKEN_VALUE
+          run-id: ${{ inputs.training_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           path: training-state
       - name: Set up Python
         uses: actions/setup-python@v5
