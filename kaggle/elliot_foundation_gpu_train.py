@@ -170,6 +170,8 @@ def main():
     model.load_state_dict(saved["model"], strict=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=a.lr, betas=(0.9, 0.95), weight_decay=0.1)
     optimizer.load_state_dict(saved["optimizer"])
+    if saved.get("scaler") and scaler.is_enabled():
+        scaler.load_state_dict(saved["scaler"])
     # Preserve Adam moments, but deliberately begin a lower-LR continuation phase.
     for group in optimizer.param_groups:
         group["lr"] = a.lr
@@ -222,12 +224,14 @@ def main():
             baseline = make_payload(model, optimizer, scaler, start_step, phase_step,
                                     best_loss, bad_evals, cfg, a, amp_name)
             atomic_save(baseline, best_path)
+            atomic_save(baseline, model_path)
         print(json.dumps({"existing_best_checkpoint": str(best_path), "best_validation_loss": best_loss}))
     else:
         best_loss = incoming_val
         baseline = make_payload(model, optimizer, scaler, start_step, phase_step,
                                 best_loss, bad_evals, cfg, a, amp_name)
         atomic_save(baseline, best_path)
+        atomic_save(baseline, model_path)
     if not latest_path.exists():
         atomic_save(make_payload(model, optimizer, scaler, start_step, phase_step,
                                  best_loss, bad_evals, cfg, a, amp_name), latest_path)
