@@ -165,6 +165,17 @@ def main():
     if not isinstance(saved, dict) or "model" not in saved or "config" not in saved:
         raise SystemExit("Unsupported checkpoint: expected the original {'model','optimizer','config',...} format.")
     cfg = saved["config"]
+    previous_phase = saved.get("training_phase", {})
+    if previous_phase.get("name") == "byte-foundation-continuation":
+        # Continue the exact same LR schedule when resuming this trainer's latest.pt.
+        a.lr = float(previous_phase.get("base_lr", a.lr))
+        a.min_lr = float(previous_phase.get("min_lr", a.min_lr))
+        a.warmup_steps = int(previous_phase.get("warmup_steps", a.warmup_steps))
+        a.phase_steps = int(previous_phase.get("phase_steps", a.phase_steps))
+        print(json.dumps({
+            "restored_lr_schedule": True, "lr": a.lr, "min_lr": a.min_lr,
+            "warmup_steps": a.warmup_steps, "phase_steps": a.phase_steps
+        }), flush=True)
     required = ("width", "layers", "heads", "context", "vocab_size")
     if any(k not in cfg for k in required) or int(cfg["vocab_size"]) != 256:
         raise SystemExit(f"Checkpoint config is incomplete or not byte-tokenized: {cfg}")
