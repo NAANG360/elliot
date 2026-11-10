@@ -17,7 +17,16 @@ from pathlib import Path
 
 import torch
 
-ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT_CANDIDATES = (
+    SCRIPT_DIR.parent,
+    SCRIPT_DIR,
+    SCRIPT_DIR / "elliot",
+    SCRIPT_DIR.parent / "elliot",
+)
+ROOT = next((p for p in ROOT_CANDIDATES if (p / "ai" / "train" / "train.py").is_file()), None)
+if ROOT is None:
+    raise SystemExit("Cannot find ai/train/train.py. Keep the repository's ai/train folder beside the Kaggle script.")
 sys.path.insert(0, str(ROOT / "ai" / "train"))
 from train import ElliotMini  # noqa: E402
 
