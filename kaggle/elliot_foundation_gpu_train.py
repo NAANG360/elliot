@@ -106,6 +106,7 @@ def make_payload(model, optimizer, scaler, step, phase_step, best_loss,
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--checkpoint", required=True, help="Original model.pt/elliot-136400.pt or this script's latest.pt")
+    ap.add_argument("--best-checkpoint", default="", help="Previous best.pt from an earlier Kaggle session, if resuming latest.pt")
     ap.add_argument("--data", required=True, help="Existing FineWeb-Edu corpus text file")
     ap.add_argument("--out", default="/kaggle/working/elliot-foundation-run")
     ap.add_argument("--minutes", type=float, default=600)
@@ -207,10 +208,13 @@ def main():
     # comparable baseline even when the historical checkpoint used another split.
     incoming_val = validation_loss(model, val_batches, amp_dtype)
     old_best = None
-    if best_path.is_file():
-        candidate = torch.load(best_path, map_location="cpu", weights_only=False)
+    prior_best_path = Path(a.best_checkpoint) if a.best_checkpoint else best_path
+    if prior_best_path.is_file():
+        candidate = torch.load(prior_best_path, map_location="cpu", weights_only=False)
         if candidate.get("validation_signature") == a.validation_signature:
             old_best = candidate
+            if prior_best_path.resolve() != best_path.resolve():
+                atomic_save(candidate, best_path)
     if old_best is not None:
         best_loss = float(old_best.get("best_validation_loss", incoming_val))
         if incoming_val < best_loss:
