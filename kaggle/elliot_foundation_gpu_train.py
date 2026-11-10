@@ -5,6 +5,7 @@ This is deliberately separate from the Qwen2.5 QLoRA path. It loads the exact
 ElliotMini architecture from the checkpoint config and preserves AdamW state.
 """
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -39,7 +40,7 @@ def load_bytes(path: Path, context: int, device: torch.device):
     val = ids[split:].to(device=device)
     if val.numel() < context + 2:
         raise SystemExit("Validation split is too small for the checkpoint context.")
-    return train, val, len(raw)
+    return train, val, len(raw), hashlib.sha256(raw).hexdigest()
 
 
 def sample_batch(data, batch_size, context):
@@ -85,6 +86,7 @@ def make_payload(model, optimizer, scaler, step, phase_step, best_loss,
         "best_validation_loss": float(best_loss),
         "bad_evals": int(bad_evals),
         "config": config,
+        "validation_signature": args.validation_signature,
         "training_phase": {
             "name": "byte-foundation-continuation",
             "base_lr": args.lr,
@@ -188,18 +190,34 @@ def main():
         except Exception as exc:
             print(f"RNG state not restored ({exc}); continuing with seeded RNG.", flush=True)
 
-    train_data, val_data, corpus_bytes = load_bytes(data_path, int(cfg["context"]), device)
+    train_data, val_data, corpus_bytes, corpus_sha256 = load_bytes(data_path, int(cfg["context"]), device)
+    effective_eval_batch = min(a.eval_batch_size, a.batch_size)
+    a.validation_signature = {
+        "corpus_sha256": corpus_sha256,
+        "seed": a.seed + 1,
+        "batches": a.eval_batches,
+        "batch_size": effective_eval_batch,
+        "context": int(cfg["context"]),
+    }
     val_batches = fixed_validation_batches(
-        val_data, min(a.eval_batch_size, a.batch_size), int(cfg["context"]),
-        a.eval_batches, a.seed + 1
+        val_data, effective_eval_batch, int(cfg["context"]), a.eval_batches, a.seed + 1
     )
 
     # Evaluate the incoming weights on this run's fixed holdout. This creates a
     # comparable baseline even when the historical checkpoint used another split.
     incoming_val = validation_loss(model, val_batches, amp_dtype)
+    old_best = None
     if best_path.is_file():
-        old_best = torch.load(best_path, map_location="cpu", weights_only=False)
+        candidate = torch.load(best_path, map_location="cpu", weights_only=False)
+        if candidate.get("validation_signature") == a.validation_signature:
+            old_best = candidate
+    if old_best is not None:
         best_loss = float(old_best.get("best_validation_loss", incoming_val))
+        if incoming_val < best_loss:
+            best_loss = incoming_val
+            baseline = make_payload(model, optimizer, scaler, start_step, phase_step,
+                                    best_loss, bad_evals, cfg, a, amp_name)
+            atomic_save(baseline, best_path)
         print(json.dumps({"existing_best_checkpoint": str(best_path), "best_validation_loss": best_loss}))
     else:
         best_loss = incoming_val
@@ -218,6 +236,7 @@ def main():
         "phase_step": phase_step,
         "architecture": cfg,
         "corpus_bytes": corpus_bytes,
+        "corpus_sha256": corpus_sha256,
         "incoming_validation_loss": incoming_val,
         "best_validation_loss": best_loss,
         "batch_size": a.batch_size,
@@ -316,6 +335,7 @@ def main():
         "amp": amp_name,
         "architecture": cfg,
         "corpus_bytes": corpus_bytes,
+        "corpus_sha256": corpus_sha256,
         "latest_checkpoint": str(latest_path),
         "best_checkpoint": str(best_path),
         "legacy_best_checkpoint": str(model_path),
