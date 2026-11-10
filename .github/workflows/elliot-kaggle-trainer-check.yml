@@ -1,0 +1,27 @@
+name: Elliot Kaggle trainer syntax
+
+on:
+  push:
+    branches: [feature/elliot-foundation-gpu-resume]
+    paths:
+      - 'kaggle/elliot_foundation_gpu_train.py'
+      - 'ai/train/train.py'
+      - '.github/workflows/elliot-kaggle-trainer-check.yml'
+  pull_request:
+    paths:
+      - 'kaggle/elliot_foundation_gpu_train.py'
+      - 'ai/train/train.py'
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile trainer source without running training
+        run: python -m py_compile kaggle/elliot_foundation_gpu_train.py ai/train/train.py
