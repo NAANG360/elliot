@@ -26,3 +26,7 @@ This is a Qwen2.5-0.5B-Instruct LoRA adapter. It is not itself a GGUF and is not
 
 ## No secrets
 This initial workflow needs no GitHub token and does not ask for a card. Never paste API tokens into notebook cells or chat.
+
+## Existing byte-level Elliot checkpoint continuation
+
+If the goal is to continue the custom `ElliotMini` checkpoint such as `elliot-136400.pt`, do **not** run `elliot_gpu_train.py`: that is the separate Qwen2.5-0.5B QLoRA experiment. Use [FOUNDATION_CONTINUATION.md](FOUNDATION_CONTINUATION.md) and `elliot_foundation_gpu_train.py` instead. That trainer reads the byte model's architecture from its checkpoint, preserves its AdamW state, and produces separate latest/best checkpoints for an actual continuation run.
