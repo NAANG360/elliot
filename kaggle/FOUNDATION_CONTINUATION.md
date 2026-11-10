@@ -15,7 +15,7 @@ This is the continuation path for the existing **ElliotMini byte-level checkpoin
 - Saves periodically and on Ctrl-C / notebook interruption where Python can catch it.
 - Stops after eight consecutive non-improving evaluations by default.
 
-The default model architecture is **not hardcoded**. The checkpoint config is authoritative, which prevents accidentally instantiating the newer 384/6/6/512 defaults against the older 192/4/4/256 checkpoint.
+The default model architecture is **not hardcoded**. The checkpoint config is authoritative, which prevents accidentally instantiating the newer 384/6/6/512 defaults against the older 192/4/4/256 checkpoint. The 50,000-step LR schedule is stored in each recovery checkpoint and restored automatically; `--max-new-steps` is a per-session cap, not the lifetime phase limit.
 
 ## Kaggle setup
 
