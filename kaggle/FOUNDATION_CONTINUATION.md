@@ -22,12 +22,17 @@ The default model architecture is **not hardcoded**. The checkpoint config is au
 1. Attach the existing checkpoint dataset `naang360/elliot-foundation-checkpoint`.
 2. Enable a GPU accelerator and Internet access.
 3. Make the existing FineWeb-Edu corpus file available in the notebook. The previously used working path was `/kaggle/working/elliot/ai/dataset/fineweb_edu.txt`; verify that it exists in the current session rather than downloading a second copy.
-4. This repository is private. Download `elliot_foundation_gpu_train.py` from the branch while signed in to GitHub, then upload it to the Kaggle notebook or attach it through a private Kaggle dataset. Do not use an unauthenticated public clone. The file is at [kaggle/elliot_foundation_gpu_train.py](https://github.com/NAANG360/elliot/blob/feature/elliot-foundation-gpu-resume/kaggle/elliot_foundation_gpu_train.py).
-5. Put the script at `/kaggle/working/elliot_foundation_gpu_train.py` (or change the command path below). The script imports the existing model class from the repository, so also make `ai/train/train.py` available at `/kaggle/working/elliot/ai/train/train.py`; alternatively upload that file and preserve the same folder layout.
-6. Start the overnight training run (the paths below match the previously used Kaggle dataset layout):
+4. The GitHub repository currently has public visibility, so clone this branch into a separate source folder (do not overwrite your existing corpus directory):
 
 ```bash
-python /kaggle/working/elliot_foundation_gpu_train.py \
+git clone --depth 1 --branch feature/elliot-foundation-gpu-resume https://github.com/NAANG360/elliot.git /kaggle/working/elliot-repo
+```
+
+   The trainer is also available at [kaggle/elliot_foundation_gpu_train.py](https://github.com/NAANG360/elliot/blob/feature/elliot-foundation-gpu-resume/kaggle/elliot_foundation_gpu_train.py). The checkpoint and corpus remain your own Kaggle inputs; do not commit them to Git.
+5. Start the overnight training run (the paths below match the previously used Kaggle dataset layout):
+
+```bash
+python /kaggle/working/elliot-repo/kaggle/elliot_foundation_gpu_train.py \
   --checkpoint /kaggle/input/datasets/naang360/elliot-foundation-checkpoint/model/model.pt \
   --data /kaggle/working/elliot/ai/dataset/fineweb_edu.txt \
   --out /kaggle/working/elliot-foundation-run \
