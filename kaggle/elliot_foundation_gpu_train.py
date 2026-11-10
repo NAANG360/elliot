@@ -264,11 +264,13 @@ def main():
     started = time.monotonic()
     last_loss = None
     last_step = start_step
+    run_steps = 0
     stop_reason = "time-budget"
     try:
-        while phase_step < a.max_new_steps and (time.monotonic() - started) < a.minutes * 60:
+        while run_steps < a.max_new_steps and (time.monotonic() - started) < a.minutes * 60:
             phase_step += 1
-            global_step = start_step + (phase_step - int(saved.get("phase_step", 0)))
+            run_steps += 1
+            global_step = start_step + run_steps
             if phase_step <= a.warmup_steps:
                 lr = a.lr * phase_step / max(1, a.warmup_steps)
             else:
@@ -325,7 +327,7 @@ def main():
                 atomic_save(payload, latest_path)
 
         else:
-            if phase_step >= a.max_new_steps:
+            if run_steps >= a.max_new_steps:
                 stop_reason = "step-budget"
     except KeyboardInterrupt:
         stop_reason = "keyboard-interrupt"
@@ -343,7 +345,7 @@ def main():
         "stop_reason": stop_reason,
         "start_step": start_step,
         "end_step": last_step,
-        "additional_steps": max(0, last_step - start_step),
+        "additional_steps": run_steps,
         "phase_step": phase_step,
         "best_validation_loss": best_loss,
         "last_train_loss": last_loss,
